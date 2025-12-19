@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Box } from 'lucide-react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { Block } from '@/types';
-import { formatTimeAgo } from '@/lib/api';
+import { formatTimeAgo, getLatestBlock } from '@/lib/api';
 
 interface LiveBlockTickerProps {
   initialBlocks?: Block[];
@@ -13,34 +14,45 @@ interface LiveBlockTickerProps {
 
 export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
+  const [now, setNow] = useState(Date.now());
 
-  // Simulate real-time updates for demonstration
+  // Update "now" every second to refresh "ago" timestamps in real-time
   useEffect(() => {
-    if (initialBlocks.length > 0) {
-      setBlocks(initialBlocks);
-    }
-    
     const interval = setInterval(() => {
-      const newBlock: Block = {
-        hash: Array(64).fill('0').map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
-        height: (blocks[0]?.height || 823456) + 1,
-        timestamp: Date.now() / 1000,
-        txCount: Math.floor(Math.random() * 50) + 1,
-        size: Math.floor(Math.random() * 20000) + 1000,
-        weight: Math.floor(Math.random() * 50000) + 4000,
-        version: 536870912,
-        merkleRoot: 'new...',
-        previousBlockHash: blocks[0]?.hash || 'prev...',
-        nonce: Math.floor(Math.random() * 1000000),
-        bits: '17034219',
-        difficulty: 72006146478567.1,
-      };
-
-      setBlocks((prev) => [newBlock, ...prev.slice(0, 4)]);
-    }, 10000); // New block every 10 seconds (simulated)
+      setNow(Date.now());
+    }, 1000);
 
     return () => clearInterval(interval);
-  }, [initialBlocks, blocks]); // Added blocks dependency to ensure correct height increment
+  }, []);
+
+  // Usar React Query compartilhado - otimizado para 15 segundos
+  const { data: latestBlock } = useQuery({
+    queryKey: ['latestBlock'],
+    queryFn: getLatestBlock,
+    staleTime: 15000, // Cache for 15s
+    refetchInterval: 15000, // Refetch every 15s
+  });
+
+  // Initialize with initialBlocks
+  useEffect(() => {
+    if (initialBlocks.length > 0 && blocks.length === 0) {
+      setBlocks(initialBlocks.slice(0, 5));
+    }
+  }, [initialBlocks, blocks.length]);
+
+  // Update blocks when latestBlock changes (via React Query compartilhado)
+  useEffect(() => {
+    if (!latestBlock) return;
+    
+    setBlocks((prev) => {
+      // If we already have this block (by hash or height), don't update
+      const exists = prev.some((b) => b.hash === latestBlock.hash || b.height === latestBlock.height);
+      if (exists) return prev;
+      
+      // Add new block at the front, keep max 5 blocks
+      return [latestBlock, ...prev].slice(0, 5);
+    });
+  }, [latestBlock]);
 
   return (
     <div className="w-full bg-[var(--bg-secondary)]/50 border-y border-[var(--border-primary)] backdrop-blur-sm overflow-hidden">
@@ -53,18 +65,18 @@ export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
           
           <div className="flex-1 overflow-hidden relative">
             <div className="flex gap-4">
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence mode="popLayout" initial={false}>
                 {blocks.slice(0, 5).map((block) => (
                   <motion.div
-                    key={block.hash}
+                    key={`${block.height}-${block.hash}`}
                     initial={{ opacity: 0, x: -50, scale: 0.9 }}
                     animate={{ opacity: 1, x: 0, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    exit={{ opacity: 0, x: 50, scale: 0.9 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 30, duration: 0.3 }}
                     className="flex-shrink-0"
                   >
                     <Link
-                      href={`/block/${block.hash}`}
+                      href={`/block/${block.height}`}
                       className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] border border-[var(--border-primary)] hover:border-[var(--accent-primary)]/50 transition-all group min-w-[200px]"
                     >
                       <div className="p-2 rounded bg-[var(--bg-secondary)] group-hover:bg-[var(--accent-primary)]/10 transition-colors">
@@ -75,7 +87,7 @@ export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
                           #{block.height}
                         </span>
                         <span className="text-xs text-[var(--text-muted)]">
-                          {formatTimeAgo(block.timestamp)} • {block.txCount} txs
+                          {formatTimeAgo(block.timestamp, now)} • {block.txCount} txs
                         </span>
                       </div>
                     </Link>
@@ -92,5 +104,6 @@ export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
     </div>
   );
 }
+
 
 

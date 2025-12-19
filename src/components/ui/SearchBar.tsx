@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Search, ArrowRight } from 'lucide-react';
+import { handleSearchQuery } from '@/lib/search-utils';
 
 interface SearchBarProps {
   size?: 'default' | 'large';
@@ -16,12 +17,26 @@ export function SearchBar({
 }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) {
-      router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    const trimmed = query.trim();
+    if (!trimmed || isSearching) return;
+    
+    setIsSearching(true);
+    try {
+      const route = await handleSearchQuery(trimmed);
+      if (route) {
+        router.push(route);
+        setQuery(''); // Clear search after navigation
+      }
+    } catch (error) {
+      // If search fails, fallback to search page
+      router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -58,7 +73,8 @@ export function SearchBar({
           />
           <button
             type="submit"
-            className={`absolute right-2 top-1/2 -translate-y-1/2 bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-medium rounded-xl flex items-center gap-2 hover:opacity-90 transition-opacity ${
+            disabled={isSearching}
+            className={`absolute right-2 top-1/2 -translate-y-1/2 bg-gradient-to-r from-[var(--accent-primary)] to-[var(--accent-secondary)] text-white font-medium rounded-xl flex items-center gap-2 hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed ${
               isLarge ? 'px-6 py-3 text-base' : 'px-4 py-2 text-sm'
             }`}
           >

@@ -12,20 +12,34 @@ import {
   Menu, 
   X,
   Github,
-  Wallet,
-  Server
+  Server,
+  Network
 } from 'lucide-react';
+import { handleSearchQuery } from '@/lib/search-utils';
 
 export default function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const router = useRouter();
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchQuery('');
+    const trimmed = searchQuery.trim();
+    if (!trimmed || isSearching) return;
+    
+    setIsSearching(true);
+    try {
+      const route = await handleSearchQuery(trimmed);
+      if (route) {
+        router.push(route);
+        setSearchQuery(''); // Clear search after navigation
+      }
+    } catch (error) {
+      // If search fails, fallback to search page
+      router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -33,7 +47,7 @@ export default function Header() {
     { href: '/blocks', label: 'Blocks', icon: Blocks },
     { href: '/transactions', label: 'Transactions', icon: Activity },
     { href: '/masternodes', label: 'Masternodes', icon: Server },
-    { href: '/mempool', label: 'Mempool', icon: Wallet },
+    { href: '/peers', label: 'Peers', icon: Network },
   ];
 
   return (
@@ -80,7 +94,8 @@ export default function Header() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search block, transaction, or address..."
-                className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-all duration-200"
+                disabled={isSearching}
+                className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
           </form>
@@ -116,8 +131,9 @@ export default function Header() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search..."
-                className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] transition-all duration-200"
+                placeholder="Search block, transaction, or address..."
+                disabled={isSearching}
+                className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-xl text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
           </form>

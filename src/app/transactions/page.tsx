@@ -1,39 +1,35 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Activity } from 'lucide-react';
+import { Activity, Clock, CheckCircle2 } from 'lucide-react';
+import Link from 'next/link';
 
-import { TransactionRow, TransactionSkeleton } from '@/components/ui';
-import { getLatestTransactions, formatNumber } from '@/lib/api';
-
-// Mock data for development
-const mockTransactions = Array.from({ length: 20 }, (_, i) => ({
-  txid: `tx${i}b2c3d4e5f67890123456789012345678901bcdef23456789012bcdef234567`,
-  blockHash: '0000...',
-  blockHeight: 823456 - Math.floor(i / 3),
-  timestamp: Date.now() / 1000 - i * 120,
-  size: Math.floor(Math.random() * 500) + 200,
-  weight: Math.floor(Math.random() * 1500) + 500,
-  fee: Math.floor(Math.random() * 20000) + 1000,
-  feeRate: Math.random() * 50 + 5,
-  confirmed: i < 18,
-  inputs: [
-    { txid: `prev${i}`, vout: 0, address: `bc1q${i}ar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq`, value: 100000000 + i * 1000000, sequence: 4294967295 },
-  ],
-  outputs: [
-    { n: 0, address: `bc1q${i}34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c`, value: 90000000 + i * 900000, scriptPubKey: '0014...', spent: false },
-  ],
-  totalInput: 100000000 + i * 1000000,
-  totalOutput: 90000000 + i * 900000,
-}));
+import { TransactionSkeleton } from '@/components/ui';
+import { getLatestTransactions, formatNumber, formatHash, formatTimeAgo, formatBBK } from '@/lib/api';
+import type { Transaction } from '@/types';
 
 export default function TransactionsPage() {
+  const [now, setNow] = useState(Date.now());
+
+  // Update "now" every second for real-time timestamps
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Get latest transactions from the recent endpoint - otimizado para 15 segundos (mesmo intervalo dos blocos)
   const { data: transactions, isLoading } = useQuery({
-    queryKey: ['latestTransactions', 20],
-    queryFn: () => getLatestTransactions(20),
-    placeholderData: mockTransactions,
+    queryKey: ['latestTransactions'],
+    queryFn: () => getLatestTransactions(12),
+    staleTime: 15000, // Cache for 15s
+    refetchInterval: 15000, // Refresh every 15s (same as blocks)
   });
+
+  const transactionsList = Array.isArray(transactions) ? transactions : [];
 
   return (
     <div className="min-h-screen">
@@ -46,10 +42,10 @@ export default function TransactionsPage() {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)]">
-                Recent Transactions
+                Transactions
               </h1>
               <p className="text-sm text-[var(--text-muted)] mt-1">
-                Latest confirmed and pending transactions
+                Latest transactions from mempool and recent blocks
               </p>
             </div>
           </div>
@@ -65,21 +61,88 @@ export default function TransactionsPage() {
           className="space-y-3"
         >
           {isLoading ? (
-            Array.from({ length: 10 }).map((_, i) => <TransactionSkeleton key={i} />)
+            Array.from({ length: 12 }).map((_, i) => <TransactionSkeleton key={i} />)
+          ) : transactionsList.length === 0 ? (
+            <div className="card p-8 text-center">
+              <p className="text-[var(--text-muted)]">No transactions found.</p>
+            </div>
           ) : (
-            transactions?.map((tx, index) => (
-              <TransactionRow key={tx.txid} transaction={tx} index={index} />
-            ))
+            transactionsList.map((tx, index) => {
+              const confirmations = tx.confirmations || 0;
+              const isUnconfirmed = confirmations < 6;
+              const confirmationText = isUnconfirmed ? `${confirmations}/6` : 'Confirmed';
+
+              return (
+                <Link key={tx.txid} href={`/tx/${tx.txid}`}>
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    className="card p-4 hover:bg-[var(--bg-hover)] cursor-pointer group"
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                      {/* TXID and Status */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="hash-text font-medium">{formatHash(tx.txid, 16)}</span>
+                          {isUnconfirmed ? (
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-warning)]/10 text-[var(--accent-warning)]">
+                              {confirmationText}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-success)]/10 text-[var(--accent-success)]">
+                              {confirmationText}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatTimeAgo(tx.timestamp, now)}</span>
+                          {tx.blockHeight && (
+                            <>
+                              <span>•</span>
+                              <span>Block #{formatNumber(tx.blockHeight)}</span>
+                            </>
+                          )}
+                          {confirmations > 0 && (
+                            <>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" />
+                                {formatNumber(confirmations)} confirmations
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                    {/* Amount */}
+                    <div className="flex items-center gap-6 text-right">
+                      <div>
+                        <p className="text-sm font-medium text-[var(--text-primary)]">
+                          {formatBBK(tx.totalOutput)} BBK
+                        </p>
+                      </div>
+                      <div className="text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] group-hover:translate-x-1 transition-all">
+                        →
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </Link>
+            );
+            })
           )}
         </motion.div>
 
-        {/* Note about real-time updates */}
+        {/* Info */}
         <div className="mt-8 text-center text-sm text-[var(--text-muted)]">
-          <p>Transactions are updated in real-time from the mempool and recent blocks.</p>
+          <p>Showing latest transactions. Transactions are updated every 15 seconds.</p>
         </div>
       </section>
     </div>
   );
 }
+
 
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -16,41 +16,14 @@ import {
   ArrowRight,
   Copy,
   Check,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Award,
 } from 'lucide-react';
 import { useState } from 'react';
 
-import { TransactionRow, Loading, TransactionSkeleton } from '@/components/ui';
-import { getBlock, getBlockTransactions, formatNumber, formatDate, formatBytes, formatHash } from '@/lib/api';
-
-// Mock data for development
-const mockBlock = {
-  hash: '0000000000000000000234abc567def890123456789abcdef0123456789abcdef',
-  height: 823456,
-  timestamp: Date.now() / 1000 - 120,
-  txCount: 2345,
-  size: 1456789,
-  weight: 3999234,
-  version: 536870912,
-  merkleRoot: 'abc123def456789012345678901234567890abcdef1234567890abcdef123456',
-  previousBlockHash: '0000000000000000000123abc456def789012345678abcdef9012345678abcdef',
-  nonce: 12345678,
-  bits: '17034219',
-  difficulty: 72006146478567.1,
-  miner: 'F2Pool',
-  reward: 625000000,
-};
-
-const mockTransactions = {
-  data: [
-    { txid: 'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456', blockHash: '0000...', blockHeight: 823456, timestamp: Date.now() / 1000 - 45, size: 234, weight: 654, fee: 0, feeRate: 0, confirmed: true, inputs: [], outputs: [{ n: 0, address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', value: 625000000, scriptPubKey: '76a914...', spent: false }], totalInput: 0, totalOutput: 625000000 },
-    { txid: 'b2c3d4e5f67890123456789012345678901bcdef23456789012bcdef234567', blockHash: '0000...', blockHeight: 823456, timestamp: Date.now() / 1000 - 120, size: 456, weight: 876, fee: 8900, feeRate: 23.5, confirmed: true, inputs: [{ txid: 'prev2', vout: 1, address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', value: 120000000, sequence: 4294967295 }], outputs: [{ n: 0, address: 'bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c', value: 110000000, scriptPubKey: '0014...', spent: false }], totalInput: 120000000, totalOutput: 110000000 },
-    { txid: 'c3d4e5f678901234567890123456789012cdef345678901234cdef3456789', blockHash: '0000...', blockHeight: 823456, timestamp: Date.now() / 1000 - 300, size: 678, weight: 1234, fee: 15600, feeRate: 34.2, confirmed: true, inputs: [{ txid: 'prev3', vout: 0, address: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2', value: 250000000, sequence: 4294967295 }], outputs: [{ n: 0, address: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4', value: 234000000, scriptPubKey: '0014...', spent: false }], totalInput: 250000000, totalOutput: 234000000 },
-  ],
-  total: 2345,
-  page: 1,
-  pageSize: 20,
-  hasMore: true,
-};
+import { Loading } from '@/components/ui';
+import { getBlockDetails, getTransactionDetails, formatNumber, formatDate, formatBytes, formatHash, formatBBK } from '@/lib/api';
 
 export default function BlockDetailPage() {
   const params = useParams();
@@ -58,17 +31,21 @@ export default function BlockDetailPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Fetch block details
-  const { data: block, isLoading: blockLoading } = useQuery({
+  const { data, isLoading: blockLoading } = useQuery({
     queryKey: ['block', hashOrHeight],
-    queryFn: () => getBlock(hashOrHeight),
-    placeholderData: mockBlock,
+    queryFn: () => getBlockDetails(hashOrHeight),
   });
 
-  // Fetch block transactions
-  const { data: txData, isLoading: txLoading } = useQuery({
-    queryKey: ['blockTransactions', hashOrHeight],
-    queryFn: () => getBlockTransactions(hashOrHeight),
-    placeholderData: mockTransactions,
+  const block = data?.block;
+  const txids = data?.txids || [];
+
+  // Fetch transaction details for the first 20 transactions
+  const txDetailsQueries = useQueries({
+    queries: txids.slice(0, 20).map((txid) => ({
+      queryKey: ['txDetails', txid],
+      queryFn: () => getTransactionDetails(txid),
+      enabled: !!txid,
+    })),
   });
 
   const copyToClipboard = async (text: string, field: string) => {
@@ -103,7 +80,6 @@ export default function BlockDetailPage() {
     { label: 'Timestamp', value: formatDate(block.timestamp), icon: Clock },
     { label: 'Transactions', value: formatNumber(block.txCount), icon: FileText },
     { label: 'Size', value: formatBytes(block.size), icon: Database },
-    { label: 'Weight', value: `${formatNumber(block.weight)} WU`, icon: Database },
     { label: 'Difficulty', value: block.difficulty.toExponential(2), icon: Cpu },
     { label: 'Version', value: `0x${block.version.toString(16)}`, icon: Hash },
     { label: 'Nonce', value: formatNumber(block.nonce), icon: Hash },
@@ -177,8 +153,8 @@ export default function BlockDetailPage() {
         >
           <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-6">Block Details</h2>
 
-          {/* Hash Fields */}
-          <div className="space-y-4 mb-6">
+          {/* Hash Field */}
+          <div className="mb-6">
             <div>
               <label className="text-sm text-[var(--text-muted)] block mb-1">Block Hash</label>
               <div className="flex items-center gap-2 p-3 bg-[var(--bg-tertiary)] rounded-lg">
@@ -193,36 +169,6 @@ export default function BlockDetailPage() {
                     <Copy className="w-4 h-4" />
                   )}
                 </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm text-[var(--text-muted)] block mb-1">Merkle Root</label>
-              <div className="flex items-center gap-2 p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                <span className="hash-text flex-1 break-all">{block.merkleRoot}</span>
-                <button
-                  onClick={() => copyToClipboard(block.merkleRoot, 'merkle')}
-                  className="p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-all"
-                >
-                  {copiedField === 'merkle' ? (
-                    <Check className="w-4 h-4 text-[var(--accent-success)]" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm text-[var(--text-muted)] block mb-1">Previous Block Hash</label>
-              <div className="flex items-center gap-2 p-3 bg-[var(--bg-tertiary)] rounded-lg">
-                <Link
-                  href={`/block/${block.previousBlockHash}`}
-                  className="hash-text flex-1 break-all hover:underline"
-                >
-                  {block.previousBlockHash}
-                </Link>
-                <ArrowRight className="w-4 h-4 text-[var(--accent-primary)]" />
               </div>
             </div>
           </div>
@@ -252,35 +198,515 @@ export default function BlockDetailPage() {
         >
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-              Transactions ({formatNumber(txData?.total || 0)})
+              Transactions ({formatNumber(block.txCount || txids.length || 0)})
             </h2>
           </div>
+          
+          {/* Block Rewards Summary - Calculate from coinbase and staking transactions */}
+          {(() => {
+            // Helper to convert value to satoshis
+            const getValueInSatoshis = (value: unknown): number => {
+              if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+              if (value < 1 && value > 0) return Math.round(value * 100000000);
+              if (value >= 1e12) return Math.round(value);
+              return Math.round(value * 100000000);
+            };
+            
+            const allRewards: Array<{
+              txid: string;
+              address: string;
+              masternodeReward: number; // in satoshis
+              stakingReward: number; // in satoshis
+            }> = [];
+            
+            // Process all transactions to find coinbase and staking rewards
+            txids.slice(0, 20).forEach((txid, index) => {
+              const txData = txDetailsQueries[index]?.data as Record<string, unknown> | undefined;
+              if (!txData) return;
+              
+              const vin = (txData.vin as Array<Record<string, unknown>>) || [];
+              const vout = (txData.vout as Array<Record<string, unknown>>) || [];
+              const isCoinbase = vin.length > 0 && vin[0].coinbase;
+              
+              // Calculate totals
+              const totalInput = vin.reduce((sum, input) => {
+                if (input.coinbase) return sum;
+                const value = (input.value as number | undefined) || 0;
+                return sum + getValueInSatoshis(value);
+              }, 0);
+              
+              const totalOutput = vout.reduce((sum, output) => {
+                const value = output.value as number | undefined;
+                return sum + getValueInSatoshis(value || 0);
+              }, 0);
+              
+              // Coinbase transaction: all outputs are block rewards
+              if (isCoinbase) {
+                vout.forEach((output) => {
+                  const valueBBK = output.value as number | undefined;
+                  if (typeof valueBBK === 'number' && valueBBK > 0) {
+                    const valueSatoshis = getValueInSatoshis(valueBBK);
+                    const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
+                    const addresses = (scriptPubKey?.addresses as string[]) || [];
+                    const address = addresses[0] || 'Unknown';
+                    
+                    allRewards.push({
+                      txid,
+                      address,
+                      masternodeReward: 0,
+                      stakingReward: valueSatoshis, // Coinbase rewards go to staking reward field for display
+                    });
+                  }
+                });
+              } 
+              // Staking transaction: totalOutput > totalInput means new coins were generated
+              else if (totalOutput > totalInput && totalInput > 0) {
+                // Get the staker address (from input)
+                const stakerAddress = vin.length > 0 && vin[0].address 
+                  ? (vin[0].address as string)
+                  : null;
+                
+                if (!stakerAddress) return;
+                
+                // Get all outputs with their values and addresses
+                const outputsWithValues = vout
+                  .map((output) => {
+                    const valueBBK = output.value as number | undefined;
+                    if (typeof valueBBK === 'number' && valueBBK > 0) {
+                      const valueSatoshis = getValueInSatoshis(valueBBK);
+                      const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
+                      const addresses = (scriptPubKey?.addresses as string[]) || [];
+                      const address = addresses[0] || 'Unknown';
+                      return { valueSatoshis, valueBBK, address };
+                    }
+                    return null;
+                  })
+                  .filter((o): o is { valueSatoshis: number; valueBBK: number; address: string } => o !== null);
+                
+                // Find output to staker (same address as input)
+                const stakerOutput = outputsWithValues.find(o => o.address === stakerAddress);
+                
+                // Find masternode output (largest output that is NOT to the staker)
+                const masternodeOutput = outputsWithValues
+                  .filter(o => o.address !== stakerAddress)
+                  .sort((a, b) => b.valueSatoshis - a.valueSatoshis)[0];
+                
+                // Staking reward = (output to staker) - (input from staker)
+                if (stakerOutput) {
+                  const stakingRewardSatoshis = stakerOutput.valueSatoshis - totalInput;
+                  
+                  if (stakingRewardSatoshis > 0) {
+                    allRewards.push({
+                      txid,
+                      address: stakerAddress, // Staking reward goes to the staker
+                      masternodeReward: 0,
+                      stakingReward: stakingRewardSatoshis,
+                    });
+                  }
+                }
+                
+                // Masternode reward is the largest output that goes to a different address
+                if (masternodeOutput) {
+                  allRewards.push({
+                    txid,
+                    address: masternodeOutput.address, // Masternode reward goes to masternode address
+                    masternodeReward: masternodeOutput.valueSatoshis,
+                    stakingReward: 0,
+                  });
+                }
+              }
+            });
+            
+            if (allRewards.length === 0) return null;
+            
+            // Group rewards by address
+            const rewardsByAddress = new Map<string, {
+              address: string;
+              masternodeReward: number;
+              stakingReward: number;
+            }>();
+            
+            allRewards.forEach((reward) => {
+              if (!rewardsByAddress.has(reward.address)) {
+                rewardsByAddress.set(reward.address, {
+                  address: reward.address,
+                  masternodeReward: 0,
+                  stakingReward: 0,
+                });
+              }
+              
+              const group = rewardsByAddress.get(reward.address)!;
+              group.masternodeReward += reward.masternodeReward;
+              group.stakingReward += reward.stakingReward;
+            });
+            
+            // Calculate total block reward
+            let totalBlockRewardSatoshis = 0;
+            rewardsByAddress.forEach((group) => {
+              totalBlockRewardSatoshis += group.masternodeReward + group.stakingReward;
+            });
+            
+            return (
+              <div className="card p-4 mb-6 bg-gradient-to-r from-[var(--accent-primary)]/5 to-[var(--accent-secondary)]/5 border border-[var(--accent-primary)]/20">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Award className="w-5 h-5 text-[var(--accent-primary)]" />
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Block Rewards</h3>
+                  </div>
+                  <div className="text-sm font-bold text-[var(--accent-primary)]">
+                    Total: {formatBBK(totalBlockRewardSatoshis)} BBK
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {Array.from(rewardsByAddress.values()).map((group, idx) => {
+                    const hasMultipleRewards = group.masternodeReward > 0 && group.stakingReward > 0;
+                    const totalReward = group.masternodeReward + group.stakingReward;
+                    
+                    return (
+                      <div key={idx} className="p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                        <div className="text-xs text-[var(--text-muted)] mb-2">
+                          {formatHash(group.address, 16)}
+                        </div>
+                        <div className="space-y-1">
+                          {group.masternodeReward > 0 && (
+                            <div className="text-sm font-medium text-[var(--accent-primary)]">
+                              +{formatBBK(group.masternodeReward)} BBK <span className="text-xs text-[var(--text-muted)]">(Masternode)</span>
+                            </div>
+                          )}
+                          {group.stakingReward > 0 && (
+                            <div className="text-sm font-medium text-[var(--accent-secondary)]">
+                              +{formatBBK(group.stakingReward)} BBK <span className="text-xs text-[var(--text-muted)]">(Staking)</span>
+                            </div>
+                          )}
+                          {hasMultipleRewards && (
+                            <div className="pt-1 border-t border-[var(--border-primary)] text-sm font-semibold text-[var(--text-primary)]">
+                              Total: +{formatBBK(totalReward)} BBK
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
-          <div className="space-y-3">
-            {txLoading ? (
-              <>
-                <TransactionSkeleton />
-                <TransactionSkeleton />
-                <TransactionSkeleton />
-              </>
+          <div className="space-y-4">
+            {txids.length === 0 ? (
+              <div className="card p-4">
+                <p className="text-sm text-[var(--text-muted)]">
+                  Transaction list is not available yet (backend currently returns only txids for this block).
+                </p>
+              </div>
             ) : (
-              txData?.data.map((tx, index) => (
-                <TransactionRow key={tx.txid} transaction={tx} index={index} />
-              ))
+              <>
+                {(() => {
+                  // Helper to convert value to satoshis
+                  const getValueInSatoshis = (value: unknown): number => {
+                    if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+                    if (value < 1 && value > 0) return Math.round(value * 100000000);
+                    if (value >= 1e12) return Math.round(value);
+                    return Math.round(value * 100000000);
+                  };
+                  
+                  return txids.slice(0, 20).map((txid, index) => {
+                    const txData = txDetailsQueries[index]?.data as Record<string, unknown> | undefined;
+                    const vin = (txData?.vin as Array<Record<string, unknown>>) || [];
+                    const vout = (txData?.vout as Array<Record<string, unknown>>) || [];
+                    const isLoading = txDetailsQueries[index]?.isLoading;
+
+                    // Helper to extract value (backend returns in BTC, convert to satoshis)
+                    const getValueInSatoshis = (value: unknown): number => {
+                      if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+                      // Backend returns values in BTC (decimals like 0.01488000), convert to satoshis
+                      // If value is very small (< 1), it's definitely in BTC
+                      if (value < 1 && value > 0) {
+                        return Math.round(value * 100000000);
+                      }
+                      // If value is >= 1, check if it's reasonable for satoshis (max ~21M BTC = 2.1e15 satoshis)
+                      // Values > 1e12 are likely already in satoshis
+                      if (value >= 1e12) {
+                        return Math.round(value);
+                      }
+                      // Otherwise assume it's BTC and convert
+                      return Math.round(value * 100000000);
+                    };
+
+                    // Calculate total input value
+                    // Backend now provides value directly in vin
+                    const totalInput = vin.reduce((sum, input) => {
+                      if (input.coinbase) return sum;
+                      const value = (input.value as number | undefined) || 0;
+                      return sum + getValueInSatoshis(value);
+                    }, 0);
+
+                    // Calculate total output value
+                    const totalOutput = vout.reduce((sum, output) => {
+                      const value = output.value as number | undefined;
+                      return sum + getValueInSatoshis(value || 0);
+                    }, 0);
+
+                    const fee = totalInput > 0 && totalOutput > 0 ? totalInput - totalOutput : 0;
+                    const isCoinbase = vin.length > 0 && !!vin[0].coinbase;
+                    const isStaking = !isCoinbase && totalOutput > totalInput && totalInput > 0; // Staking: new coins generated
+                    const isReward = isCoinbase && index === 0; // Coinbase has block rewards
+                    
+                    // Identify masternode and staking rewards in staking transactions
+                    let masternodeOutputIndex: number | null = null;
+                    let stakingRewardSatoshis = 0;
+                    const stakerAddress = vin.length > 0 && vin[0].address 
+                      ? (vin[0].address as string)
+                      : null;
+                    
+                    if (isStaking && stakerAddress) {
+                      // Get all outputs with their values and addresses
+                      const outputsWithValues = vout
+                        .map((output, idx) => {
+                          const valueBBK = output.value as number | undefined;
+                          if (typeof valueBBK === 'number' && valueBBK > 0) {
+                            const valueSatoshis = getValueInSatoshis(valueBBK);
+                            const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
+                            const addresses = (scriptPubKey?.addresses as string[]) || [];
+                            const address = addresses[0] || 'Unknown';
+                            return { index: idx, valueSatoshis, valueBBK, address };
+                          }
+                          return null;
+                        })
+                        .filter((o): o is { index: number; valueSatoshis: number; valueBBK: number; address: string } => o !== null);
+                      
+                      // Find output to staker (same address as input)
+                      const stakerOutput = outputsWithValues.find(o => o.address === stakerAddress);
+                      
+                      // Find masternode output (largest output that is NOT to the staker)
+                      const masternodeOutput = outputsWithValues
+                        .filter(o => o.address !== stakerAddress)
+                        .sort((a, b) => b.valueSatoshis - a.valueSatoshis)[0];
+                      
+                      if (masternodeOutput) {
+                        masternodeOutputIndex = masternodeOutput.index;
+                      }
+                      
+                      // Staking reward = (output to staker) - (input from staker)
+                      if (stakerOutput) {
+                        stakingRewardSatoshis = stakerOutput.valueSatoshis - totalInput;
+                      }
+                    }
+
+                  return (
+                    <Link
+                      key={txid}
+                      href={`/tx/${txid}`}
+                      className="block card p-5 hover:bg-[var(--bg-hover)] transition-all group"
+                    >
+                      {/* Transaction Header */}
+                      <div className="flex items-center justify-between mb-4 pb-4 border-b border-[var(--border-primary)]">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className="hash-text text-sm font-medium truncate">{formatHash(txid, 20)}</span>
+                          {isReward && (
+                            <span className="px-2 py-0.5 text-xs rounded-full flex items-center gap-1 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]">
+                              <Award className="w-3 h-3" />
+                              Block Reward
+                            </span>
+                          )}
+                          {isStaking && (
+                            <span className="px-2 py-0.5 text-xs rounded-full flex items-center gap-1 bg-[var(--accent-secondary)]/10 text-[var(--accent-secondary)]">
+                              <Award className="w-3 h-3" />
+                              Staking Reward
+                            </span>
+                          )}
+                          <ArrowRight className="w-4 h-4 text-[var(--accent-primary)] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        {fee > 0 && (
+                          <div className="text-xs text-[var(--text-muted)] ml-2">
+                            Fee: {formatBBK(fee)} BBK
+                          </div>
+                        )}
+                      </div>
+
+                      {isLoading ? (
+                        <div className="text-xs text-[var(--text-muted)] text-center py-4">
+                          Loading transaction details...
+                        </div>
+                      ) : (
+                        <div className="grid md:grid-cols-2 gap-4">
+                          {/* Inputs Section */}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="p-1.5 rounded bg-[var(--accent-warning)]/10">
+                                <ArrowDownLeft className="w-3.5 h-3.5 text-[var(--accent-warning)]" />
+                              </div>
+                              <span className="text-xs font-medium text-[var(--text-muted)] uppercase">
+                                Input{vin.length > 1 ? 's' : ''} ({vin.length})
+                              </span>
+                            </div>
+                            {isCoinbase ? (
+                              <div className="pl-8">
+                                <div className="text-sm font-medium text-[var(--text-primary)]">Coinbase</div>
+                                <div className="text-xs text-[var(--text-muted)] mt-0.5">Block reward</div>
+                              </div>
+                            ) : (
+                              <div className="space-y-2 pl-8">
+                                {vin.slice(0, 3).map((input, i) => {
+                                  // Backend now provides value and address directly in vin
+                                  const value = getValueInSatoshis((input.value as number | undefined) || 0);
+                                  const address = (input.address as string) || 'Unknown';
+
+                                  return (
+                                    <div key={i} className="p-2 rounded bg-[var(--bg-tertiary)]">
+                                      <div className="text-xs text-[var(--text-muted)] mb-1 truncate">
+                                        {formatHash(address, 12)}
+                                      </div>
+                                      <div className="text-sm font-medium text-[var(--text-primary)]">
+                                        {formatBBK(value)} BBK
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {vin.length > 3 && (
+                                  <div className="text-xs text-[var(--text-muted)] pt-1">
+                                    +{vin.length - 3} more input{vin.length - 3 > 1 ? 's' : ''}
+                                  </div>
+                                )}
+                                {totalInput > 0 && (
+                                  <div className="pt-2 border-t border-[var(--border-primary)]">
+                                    <div className="text-xs text-[var(--text-muted)]">Total</div>
+                                    <div className="text-sm font-semibold text-[var(--text-primary)]">
+                                      {formatBBK(totalInput)} BBK
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Outputs Section */}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="p-1.5 rounded bg-[var(--accent-success)]/10">
+                                <ArrowUpRight className="w-3.5 h-3.5 text-[var(--accent-success)]" />
+                              </div>
+                              <span className="text-xs font-medium text-[var(--text-muted)] uppercase">
+                                Output{vout.length > 1 ? 's' : ''} ({vout.length})
+                              </span>
+                            </div>
+                            <div className="space-y-2 pl-8">
+                              {vout.slice(0, 3).map((output, sliceIndex) => {
+                                const outputIndex = (output.n as number) ?? sliceIndex;
+                                const value = getValueInSatoshis(output.value || 0);
+                                const valueBBK = (output.value as number) || 0;
+                                const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
+                                const addresses = (scriptPubKey?.addresses as string[]) || [];
+                                const address = addresses[0] || 'Unknown';
+                                
+                                // Check if this output is a reward
+                                const isRewardOutput = (isCoinbase && index === 0) || 
+                                                      (isStaking && (outputIndex === masternodeOutputIndex || (address === stakerAddress && stakingRewardSatoshis > 0)));
+                                const isMasternodeReward = isStaking && outputIndex === masternodeOutputIndex;
+                                const isStakingReward = isStaking && address === stakerAddress && stakingRewardSatoshis > 0;
+
+                                return (
+                                  <div key={outputIndex} className="p-2 rounded bg-[var(--bg-tertiary)]">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="text-xs text-[var(--text-muted)] truncate flex-1">
+                                        {formatHash(address, 12)}
+                                      </div>
+                                      {isMasternodeReward && (
+                                        <span className="ml-2 px-1.5 py-0.5 text-xs rounded bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]">
+                                          MN
+                                        </span>
+                                      )}
+                                      {isStakingReward && (
+                                        <span className="ml-2 px-1.5 py-0.5 text-xs rounded bg-[var(--accent-secondary)]/10 text-[var(--accent-secondary)]">
+                                          ST
+                                        </span>
+                                      )}
+                                      {isRewardOutput && !isMasternodeReward && !isStakingReward && (
+                                        <span className="ml-2 px-1.5 py-0.5 text-xs rounded bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]">
+                                          Reward
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className={`text-sm font-medium ${
+                                      isMasternodeReward
+                                        ? 'text-[var(--accent-primary)]'
+                                        : isStakingReward
+                                        ? 'text-[var(--accent-secondary)]'
+                                        : isRewardOutput
+                                        ? 'text-[var(--accent-primary)]'
+                                        : 'text-[var(--text-primary)]'
+                                    }`}>
+                                      {isRewardOutput ? '+' : ''}{formatBBK(value)} BBK
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {vout.length > 3 && (
+                                <div className="text-xs text-[var(--text-muted)] pt-1">
+                                  +{vout.length - 3} more output{vout.length - 3 > 1 ? 's' : ''}
+                                </div>
+                              )}
+                              {isReward ? (
+                                // For coinbase transactions, show total block reward
+                                <div className="pt-2 border-t border-[var(--border-primary)]">
+                                  <div className="text-xs text-[var(--text-muted)]">Block Reward</div>
+                                  <div className="text-sm font-semibold text-[var(--accent-primary)]">
+                                    +{formatBBK(totalOutput)} BBK
+                                  </div>
+                                </div>
+                              ) : isStaking ? (
+                                // For staking transactions, show masternode and staking rewards
+                                <div className="pt-2 border-t border-[var(--border-primary)]">
+                                  <div className="space-y-1">
+                                    {stakingRewardSatoshis > 0 && (
+                                      <div>
+                                        <div className="text-xs text-[var(--text-muted)]">Staking Reward</div>
+                                        <div className="text-sm font-semibold text-[var(--accent-secondary)]">
+                                          +{formatBBK(stakingRewardSatoshis)} BBK
+                                        </div>
+                                      </div>
+                                    )}
+                                    {masternodeOutputIndex !== null && (
+                                      <div>
+                                        <div className="text-xs text-[var(--text-muted)]">Masternode Reward</div>
+                                        <div className="text-sm font-semibold text-[var(--accent-primary)]">
+                                          +{formatBBK(getValueInSatoshis(vout[masternodeOutputIndex]?.value || 0))} BBK
+                                        </div>
+                                      </div>
+                                    )}
+                                    <div className="pt-1 border-t border-[var(--border-primary)]">
+                                      <div className="text-xs text-[var(--text-muted)]">New Coins Generated</div>
+                                      <div className="text-sm font-semibold text-[var(--text-primary)]">
+                                        +{formatBBK(totalOutput - totalInput)} BBK
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : totalOutput > 0 ? (
+                                // For regular transactions, show total
+                                <div className="pt-2 border-t border-[var(--border-primary)]">
+                                  <div className="text-xs text-[var(--text-muted)]">Total</div>
+                                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                                    {formatBBK(totalOutput)} BBK
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </Link>
+                  );
+                  });
+                })()}
+                {txids.length > 20 && (
+                  <p className="text-xs text-[var(--text-muted)] text-center">
+                    Showing first 20 of {formatNumber(txids.length)} transactions.
+                  </p>
+                )}
+              </>
             )}
           </div>
-
-          {txData?.hasMore && (
-            <div className="mt-6 text-center">
-              <Link
-                href={`/block/${hashOrHeight}/transactions`}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all"
-              >
-                View all transactions
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-          )}
         </motion.div>
       </section>
     </div>

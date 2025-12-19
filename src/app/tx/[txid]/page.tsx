@@ -15,46 +15,175 @@ import {
   CheckCircle,
   AlertCircle,
   Blocks,
+  Award,
 } from 'lucide-react';
 import { useState } from 'react';
 
 import { Loading } from '@/components/ui';
-import { getTransaction, formatNumber, formatDate, formatBytes, formatHash, formatBTC } from '@/lib/api';
-
-// Mock data for development
-const mockTransaction = {
-  txid: 'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456',
-  blockHash: '0000000000000000000234abc567def890123456789abcdef0123456789abcdef',
-  blockHeight: 823456,
-  timestamp: Date.now() / 1000 - 3600,
-  size: 456,
-  weight: 876,
-  fee: 8900,
-  feeRate: 23.5,
-  confirmed: true,
-  inputs: [
-    { txid: 'prev1abc456def789012345678901234567890abcdef1234567890abcdef12345', vout: 0, address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', value: 50000000, scriptSig: '47304402...', sequence: 4294967295 },
-    { txid: 'prev2def789012345678901234567890abcdef1234567890abcdef123456789012', vout: 1, address: '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy', value: 75000000, scriptSig: '483045...', sequence: 4294967295 },
-  ],
-  outputs: [
-    { n: 0, address: 'bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c', value: 110000000, scriptPubKey: '0014...', spent: false },
-    { n: 1, address: 'bc1qgdjqv0av3q56jvd82tkdjpy7gdp9ut8tlqmgrpmv24sq90ecnvqqjwvw97', value: 14991100, scriptPubKey: '0020...', spent: true, spentBy: 'spent123abc456def...' },
-  ],
-  totalInput: 125000000,
-  totalOutput: 124991100,
-};
+import { getTransactionDetails, formatNumber, formatDate, formatBytes, formatHash, formatBBK } from '@/lib/api';
+import type { Transaction } from '@/types';
 
 export default function TransactionDetailPage() {
   const params = useParams();
   const txid = params.txid as string;
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // Fetch transaction details
-  const { data: tx, isLoading } = useQuery({
+  // Helper to convert value to satoshis
+  const getValueInSatoshis = (value: unknown): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+    if (value < 1 && value > 0) return Math.round(value * 100000000);
+    if (value >= 1e12) return Math.round(value);
+    return Math.round(value * 100000000);
+  };
+
+  // Fetch transaction details from API
+  const { data: txData, isLoading } = useQuery({
     queryKey: ['transaction', txid],
-    queryFn: () => getTransaction(txid),
-    placeholderData: mockTransaction,
+    queryFn: () => getTransactionDetails(txid),
   });
+
+  // Map API data to UI format
+  const tx: Transaction | null = txData ? (() => {
+    const vin = (txData.vin as Array<Record<string, unknown>>) || [];
+    const vout = (txData.vout as Array<Record<string, unknown>>) || [];
+    const txidFromApi = (txData.txid as string) || txid;
+    const blockhash = txData.blockhash as string | undefined;
+    const blocktime = txData.blocktime as number | undefined;
+    const time = txData.time as number | undefined;
+    const size = (txData.size as number) || (txData.vsize as number) || 0;
+    const confirmations = (txData.confirmations as number) || 0;
+    const blockHeight = txData.blockheight as number | undefined;
+
+    // Calculate totals
+    const totalInput = vin.reduce((sum, input) => {
+      if (input.coinbase) return sum;
+      const value = (input.value as number | undefined) || 0;
+      return sum + getValueInSatoshis(value);
+    }, 0);
+
+    const totalOutput = vout.reduce((sum, output) => {
+      const value = output.value as number | undefined;
+      return sum + getValueInSatoshis(value || 0);
+    }, 0);
+
+    const fee = totalInput > 0 && totalOutput > 0 ? totalInput - totalOutput : 0;
+    const feeRate = size > 0 ? fee / size : 0;
+    const isCoinbase = vin.length > 0 && !!vin[0].coinbase;
+    const isStaking = !isCoinbase && totalOutput > totalInput && totalInput > 0;
+
+    // Map inputs
+    const inputs = vin.map((input, index) => {
+      const prevout = input.prevout as Record<string, unknown> | undefined;
+      const prevoutValue = prevout?.value as number | undefined;
+      const value = (input.value as number | undefined) || prevoutValue || 0;
+      const address = (input.address as string) || undefined;
+      const txidInput = (input.txid as string) || '';
+      const voutIndex = (input.vout as number) ?? (input.n as number) ?? index;
+      const sequence = (input.sequence as number) ?? 0xffffffff;
+
+      return {
+        txid: txidInput,
+        vout: voutIndex,
+        address,
+        value: getValueInSatoshis(value),
+        scriptSig: undefined,
+        sequence,
+      };
+    });
+
+    // Identify staking rewards
+    let masternodeOutputIndex: number | null = null;
+    let stakingRewardSatoshis = 0;
+    const stakerAddress = vin.length > 0 && vin[0].address 
+      ? (vin[0].address as string)
+      : null;
+
+    if (isStaking && stakerAddress) {
+      // Get all outputs with their values and addresses
+      const outputsWithValues = vout
+        .map((output, idx) => {
+          const valueBBK = output.value as number | undefined;
+          if (typeof valueBBK === 'number' && valueBBK > 0) {
+            const valueSatoshis = getValueInSatoshis(valueBBK);
+            const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
+            const addresses = (scriptPubKey?.addresses as string[]) || [];
+            const address = addresses[0] || 'Unknown';
+            return { index: idx, valueSatoshis, valueBBK, address };
+          }
+          return null;
+        })
+        .filter((o): o is { index: number; valueSatoshis: number; valueBBK: number; address: string } => o !== null);
+
+      // Find output to staker (same address as input)
+      const stakerOutput = outputsWithValues.find(o => o.address === stakerAddress);
+
+      // Find masternode output (largest output that is NOT to the staker)
+      const masternodeOutput = outputsWithValues
+        .filter(o => o.address !== stakerAddress)
+        .sort((a, b) => b.valueSatoshis - a.valueSatoshis)[0];
+
+      if (masternodeOutput) {
+        masternodeOutputIndex = masternodeOutput.index;
+      }
+
+      // Staking reward = (output to staker) - (input from staker)
+      if (stakerOutput) {
+        stakingRewardSatoshis = stakerOutput.valueSatoshis - totalInput;
+      }
+    }
+
+    // Map outputs
+    const outputs = vout.map((output, index) => {
+      const value = output.value as number | undefined;
+      const n = (output.n as number) ?? index;
+      const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
+      const addresses = (scriptPubKey?.addresses as string[]) || [];
+      const address = addresses[0] || undefined;
+      const scriptPubKeyHex = (output.scriptPubKey as string | undefined) || 
+                              (scriptPubKey?.hex as string | undefined) || 
+                              '';
+
+      const isMasternodeReward = isStaking && index === masternodeOutputIndex;
+      const isStakingReward = isStaking && address === stakerAddress && stakingRewardSatoshis > 0;
+      const isRewardOutput = isCoinbase || isMasternodeReward || isStakingReward;
+
+      return {
+        n,
+        address,
+        value: getValueInSatoshis(value || 0),
+        scriptPubKey: scriptPubKeyHex,
+        spent: false, // API doesn't provide this info
+        spentBy: undefined,
+        isRewardOutput,
+        isMasternodeReward,
+        isStakingReward,
+      };
+    });
+
+    // Determine timestamp
+    const timestamp = blocktime || time || Math.floor(Date.now() / 1000);
+
+    // A transaction is confirmed only when it has 6 or more confirmations (same as blocks)
+    const confirmed = confirmations >= 6;
+
+    return {
+      txid: txidFromApi,
+      blockHash: blockhash,
+      blockHeight,
+      timestamp,
+      size,
+      fee,
+      feeRate,
+      confirmed,
+      confirmations,
+      inputs,
+      outputs,
+      totalInput,
+      totalOutput,
+      isCoinbase,
+      isStaking,
+    };
+  })() : null;
 
   const copyToClipboard = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -116,14 +245,32 @@ export default function TransactionDetailPage() {
                 <h1 className="text-xl md:text-2xl font-bold text-[var(--text-primary)]">
                   Transaction
                 </h1>
-                <div className="flex items-center gap-2 mt-1">
-                  {tx.confirmed ? (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-success)]/10 text-[var(--accent-success)]">
-                      Confirmed
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {(() => {
+                    const confirmations = tx.confirmations || 0;
+                    const isUnconfirmed = confirmations < 6;
+                    const confirmationText = isUnconfirmed ? `${confirmations}/6` : 'Confirmed';
+                    
+                    return isUnconfirmed ? (
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-warning)]/10 text-[var(--accent-warning)]">
+                        {confirmationText}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-success)]/10 text-[var(--accent-success)]">
+                        {confirmationText}
+                      </span>
+                    );
+                  })()}
+                  {tx.isCoinbase && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] flex items-center gap-1">
+                      <Award className="w-3 h-3" />
+                      Block Reward
                     </span>
-                  ) : (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-warning)]/10 text-[var(--accent-warning)]">
-                      Pending
+                  )}
+                  {tx.isStaking && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-secondary)]/10 text-[var(--accent-secondary)] flex items-center gap-1">
+                      <Award className="w-3 h-3" />
+                      Staking Reward
                     </span>
                   )}
                   {tx.blockHeight && (
@@ -142,7 +289,7 @@ export default function TransactionDetailPage() {
             {/* Amount */}
             <div className="text-right">
               <p className="text-2xl font-bold text-[var(--text-primary)]">
-                {formatBTC(tx.totalOutput)} <span className="text-[var(--accent-primary)]">BTC</span>
+                {formatBBK(tx.totalOutput)} <span className="text-[var(--accent-primary)]">BBK</span>
               </p>
               <p className="text-sm text-[var(--text-muted)]">
                 Fee: {formatNumber(tx.fee)} sats ({tx.feeRate.toFixed(1)} sat/vB)
@@ -200,13 +347,6 @@ export default function TransactionDetailPage() {
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-2 text-[var(--text-muted)] mb-1">
-              <Hash className="w-4 h-4" />
-              <span className="text-xs">Weight</span>
-            </div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">{formatNumber(tx.weight)} WU</p>
-          </div>
-          <div className="card p-4">
-            <div className="flex items-center gap-2 text-[var(--text-muted)] mb-1">
               <Zap className="w-4 h-4" />
               <span className="text-xs">Fee Rate</span>
             </div>
@@ -230,9 +370,16 @@ export default function TransactionDetailPage() {
                 Inputs ({tx.inputs.length})
               </h3>
               <div className="space-y-3">
-                {tx.inputs.length === 0 ? (
+                {tx.isCoinbase ? (
                   <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg">
-                    <span className="text-[var(--accent-warning)]">Coinbase (Newly Generated Coins)</span>
+                    <span className="text-[var(--accent-primary)] flex items-center gap-2">
+                      <Award className="w-4 h-4" />
+                      Coinbase (Block Reward)
+                    </span>
+                  </div>
+                ) : tx.inputs.length === 0 ? (
+                  <div className="p-4 bg-[var(--bg-tertiary)] rounded-lg">
+                    <span className="text-[var(--text-muted)]">No inputs</span>
                   </div>
                 ) : (
                   tx.inputs.map((input, index) => (
@@ -240,7 +387,7 @@ export default function TransactionDetailPage() {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs text-[var(--text-muted)]">#{index}</span>
                         <span className="text-sm font-medium text-[var(--text-primary)]">
-                          {formatBTC(input.value)} BTC
+                          {formatBBK(input.value)} BBK
                         </span>
                       </div>
                       {input.address ? (
@@ -253,11 +400,13 @@ export default function TransactionDetailPage() {
                       ) : (
                         <span className="text-sm text-[var(--text-muted)]">Unknown</span>
                       )}
-                      <div className="mt-2 text-xs text-[var(--text-muted)]">
-                        <Link href={`/tx/${input.txid}`} className="hover:text-[var(--accent-primary)]">
-                          {formatHash(input.txid, 10)}:{input.vout}
-                        </Link>
-                      </div>
+                      {input.txid && (
+                        <div className="mt-2 text-xs text-[var(--text-muted)]">
+                          <Link href={`/tx/${input.txid}`} className="hover:text-[var(--accent-primary)]">
+                            {formatHash(input.txid, 10)}:{input.vout}
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -265,7 +414,7 @@ export default function TransactionDetailPage() {
               <div className="mt-4 p-3 bg-[var(--bg-tertiary)] rounded-lg text-right">
                 <span className="text-sm text-[var(--text-muted)]">Total Input: </span>
                 <span className="text-sm font-medium text-[var(--text-primary)]">
-                  {formatBTC(tx.totalInput)} BTC
+                  {formatBBK(tx.totalInput)} BBK
                 </span>
               </div>
             </div>
@@ -286,9 +435,32 @@ export default function TransactionDetailPage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-[var(--text-muted)]">#{output.n}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-[var(--text-primary)]">
-                          {formatBTC(output.value)} BTC
+                        <span className={`text-sm font-medium ${
+                          output.isMasternodeReward
+                            ? 'text-[var(--accent-primary)]'
+                            : output.isStakingReward
+                            ? 'text-[var(--accent-secondary)]'
+                            : output.isRewardOutput
+                            ? 'text-[var(--accent-primary)]'
+                            : 'text-[var(--text-primary)]'
+                        }`}>
+                          {output.isRewardOutput ? '+' : ''}{formatBBK(output.value)} BBK
                         </span>
+                        {output.isMasternodeReward && (
+                          <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]">
+                            MN
+                          </span>
+                        )}
+                        {output.isStakingReward && (
+                          <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-secondary)]/10 text-[var(--accent-secondary)]">
+                            ST
+                          </span>
+                        )}
+                        {output.isRewardOutput && !output.isMasternodeReward && !output.isStakingReward && (
+                          <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]">
+                            Reward
+                          </span>
+                        )}
                         {output.spent ? (
                           <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-error)]/10 text-[var(--accent-error)]">
                             Spent
@@ -324,7 +496,7 @@ export default function TransactionDetailPage() {
               <div className="mt-4 p-3 bg-[var(--bg-tertiary)] rounded-lg text-right">
                 <span className="text-sm text-[var(--text-muted)]">Total Output: </span>
                 <span className="text-sm font-medium text-[var(--text-primary)]">
-                  {formatBTC(tx.totalOutput)} BTC
+                  {formatBBK(tx.totalOutput)} BBK
                 </span>
               </div>
             </div>

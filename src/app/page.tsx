@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
@@ -9,41 +10,228 @@ import {
   TrendingUp,
   Clock,
   Database,
-  Cpu,
   ArrowRight,
   Zap,
   Server,
+  Globe,
+  Network,
 } from 'lucide-react';
 
 import { SearchBar, StatsCard, BlockCard, TransactionRow, StatsSkeleton, BlockSkeleton, TransactionSkeleton, LiveBlockTicker } from '@/components/ui';
-import { getNetworkStats, getLatestBlocks, getLatestTransactions, formatNumber, formatBytes } from '@/lib/api';
-import { mockStats, mockBlocks, mockTransactions } from '@/lib/mock-data';
+import { getNetworkStats, getLatestNBlocks, getLatestTransactions, getChainHeight, getLatestBlock, formatNumber, formatBytes, getMasternodesList, getTransactionsTotal, getPeers } from '@/lib/api';
+import type { Transaction, Block } from '@/types';
 
 export default function HomePage() {
+  // Update "now" every second to refresh "ago" timestamps in real-time
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Fetch network stats
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['networkStats'],
     queryFn: getNetworkStats,
-    placeholderData: mockStats,
   });
 
-  // Fetch latest blocks
-  const { data: blocks, isLoading: blocksLoading } = useQuery({
-    queryKey: ['latestBlocks'],
-    queryFn: () => getLatestBlocks(5),
-    placeholderData: mockBlocks,
+  // Fetch masternodes list to count enabled
+  const { data: masternodesList, isLoading: masternodesListLoading } = useQuery({
+    queryKey: ['masternodes-list'],
+    queryFn: getMasternodesList,
+    refetchInterval: 60000, // Refetch every 60 seconds
   });
 
-  // Fetch latest transactions
+  // Fetch total transactions count
+  const { data: totalTransactions, isLoading: totalTransactionsLoading } = useQuery({
+    queryKey: ['transactionsTotal'],
+    queryFn: getTransactionsTotal,
+    refetchInterval: 60000, // Refetch every 60 seconds
+  });
+
+  // Fetch peers count
+  const { data: peersData, isLoading: peersLoading } = useQuery({
+    queryKey: ['peers'],
+    queryFn: getPeers,
+    refetchInterval: 60000, // Refetch every 60 seconds
+  });
+
+  // Calculate enabled masternodes count
+  const enabledMasternodes = useMemo(() => {
+    // Try stats.masternodes.enabled first
+    if (stats?.masternodes?.enabled !== undefined && stats.masternodes.enabled !== null) {
+      return stats.masternodes.enabled;
+    }
+    // Fallback: count enabled masternodes from the list
+    if (masternodesList?.active) {
+      return masternodesList.active.filter(mn => mn.status === 'ENABLED').length;
+    }
+    return 0;
+  }, [stats?.masternodes?.enabled, masternodesList?.active]);
+
+  // Calculate offline masternodes count
+  const offlineMasternodes = useMemo(() => {
+    // Calculate from masternodes list (inactive masternodes)
+    if (masternodesList?.inactive) {
+      return masternodesList.inactive.length;
+    }
+    // Fallback: total - enabled
+    const total = stats?.masternodes?.total || 0;
+    if (total > 0 && enabledMasternodes > 0) {
+      return total - enabledMasternodes;
+    }
+    return 0;
+  }, [masternodesList?.inactive, stats?.masternodes?.total, enabledMasternodes]);
+
+  // Fetch current chain height - otimizado para 15 segundos
+  const { data: currentHeight } = useQuery({
+    queryKey: ['chainHeight'],
+    queryFn: getChainHeight,
+    staleTime: 15000, // Cache for 15s
+    refetchInterval: 15000, // Refetch every 15s
+  });
+
+  // Fetch latest block - otimizado para 15 segundos (compartilhado com LiveBlockTicker)
+  const { data: latestBlock } = useQuery({
+    queryKey: ['latestBlock'],
+    queryFn: getLatestBlock,
+    staleTime: 15000, // Cache for 15s
+    refetchInterval: 15000, // Refetch every 15s
+  });
+
+  // Fetch initial latest blocks - usando hook compartilhado
+  // Usa cache do localStorage para blocos confirmados
+  const { data: initialBlocks, isLoading: blocksLoading } = useQuery({
+    queryKey: ['latestBlocks', 12],
+    queryFn: () => getLatestNBlocks(12),
+    staleTime: 15000, // Cache for 15s
+    refetchInterval: 15000, // Refetch every 15s
+  });
+
+  // Live blocks state - atualizado via React Query
+  const [liveBlocks, setLiveBlocks] = useState<Block[]>([]);
+
+  // Initialize with fetched blocks
+  useEffect(() => {
+    if (Array.isArray(initialBlocks) && initialBlocks.length > 0) {
+      const height = currentHeight || latestBlock?.height || 0;
+      const blocksWithConfirmations = initialBlocks.map(block => ({
+        ...block,
+        confirmations: Math.max(0, height - block.height + 1),
+      }));
+      setLiveBlocks(blocksWithConfirmations);
+    }
+  }, [initialBlocks, currentHeight, latestBlock]);
+
+  // Update blocks when latestBlock changes (via React Query)
+  useEffect(() => {
+    if (!latestBlock) return;
+    
+    const height = currentHeight || latestBlock.height;
+    
+    setLiveBlocks((prev) => {
+      // Check if we already have this block
+      const exists = prev.some((b) => b.hash === latestBlock.hash || b.height === latestBlock.height);
+      if (exists) {
+        // Update confirmations for all blocks
+        return prev.map(block => ({
+          ...block,
+          confirmations: Math.max(0, height - block.height + 1),
+        }));
+      }
+      
+      // Add new block at the front, keep max 12 blocks
+      const newBlock = {
+        ...latestBlock,
+        confirmations: Math.max(0, height - latestBlock.height + 1),
+      };
+      return [newBlock, ...prev].slice(0, 12);
+    });
+  }, [latestBlock, currentHeight]);
+
+  // Update confirmations when currentHeight changes
+  useEffect(() => {
+    if (currentHeight && liveBlocks.length > 0) {
+      setLiveBlocks((prev) =>
+        prev.map(block => ({
+          ...block,
+          confirmations: Math.max(0, currentHeight - block.height + 1),
+        }))
+      );
+    }
+  }, [currentHeight, liveBlocks.length]);
+
+  // Fetch latest transactions - otimizado para 15 segundos (mesmo intervalo dos blocos)
   const { data: transactions, isLoading: txLoading } = useQuery({
     queryKey: ['latestTransactions'],
-    queryFn: () => getLatestTransactions(5),
-    placeholderData: mockTransactions,
+    queryFn: () => getLatestTransactions(12),
+    staleTime: 15000, // Cache for 15s
+    refetchInterval: 15000, // Refetch every 15s (same as blocks)
   });
+
+  // Live transactions state - atualizado via React Query
+  const [liveTransactions, setLiveTransactions] = useState<Transaction[]>([]);
+
+  // Initialize with fetched transactions
+  useEffect(() => {
+    if (Array.isArray(transactions) && transactions.length > 0) {
+      setLiveTransactions(transactions);
+    }
+  }, [transactions]);
+
+  // Update transactions when new data arrives (via React Query)
+  // The API already returns updated confirmations, so we just update the state
+  useEffect(() => {
+    if (!transactions || !Array.isArray(transactions)) return;
+    
+    setLiveTransactions((prev) => {
+      // Check if we have new transactions by comparing txids
+      const newTxids = new Set(transactions.map(tx => tx.txid));
+      const prevTxids = new Set(prev.map(tx => tx.txid));
+      
+      // If txids are the same, just update with new data (confirmations, etc)
+      const txidsEqual = newTxids.size === prevTxids.size && 
+        Array.from(newTxids).every(txid => prevTxids.has(txid));
+      
+      if (txidsEqual) {
+        // Update existing transactions with new data (confirmations updated by API)
+        return prev.map(prevTx => {
+          const updatedTx = transactions.find(tx => tx.txid === prevTx.txid);
+          if (updatedTx) {
+            // Ensure confirmed status is based on confirmations >= 6
+            return {
+              ...updatedTx,
+              confirmed: (updatedTx.confirmations || 0) >= 6,
+            };
+          }
+          return prevTx;
+        });
+      }
+      
+      // New transactions arrived, replace the list
+      // Ensure confirmed status is based on confirmations >= 6
+      return transactions.map(tx => ({
+        ...tx,
+        confirmed: (tx.confirmations || 0) >= 6,
+      }));
+    });
+  }, [transactions]);
+
+  const latestBlocks = liveBlocks.length > 0 ? liveBlocks : (Array.isArray(initialBlocks) 
+    ? initialBlocks.map(block => ({
+        ...block,
+        confirmations: currentHeight ? Math.max(0, currentHeight - block.height + 1) : block.confirmations || 0,
+      }))
+    : []);
+  const latestTransactions = liveTransactions.length > 0 ? liveTransactions : (Array.isArray(transactions) ? transactions : []);
 
   return (
     <div className="min-h-screen">
-      <LiveBlockTicker initialBlocks={blocks || mockBlocks} />
+      <LiveBlockTicker initialBlocks={latestBlocks} />
 
       {/* Hero Section */}
       <section className="relative overflow-hidden">
@@ -59,9 +247,12 @@ export default function HomePage() {
             transition={{ duration: 0.6 }}
             className="text-center mb-12"
           >
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4 flex items-center justify-center gap-3 flex-wrap">
               <span className="glow-text">BitBlocks</span>{' '}
               <span className="text-[var(--text-primary)]">Explorer (BBK)</span>
+              <span className="px-3 py-1 text-xs md:text-sm font-semibold rounded-full bg-gradient-to-r from-[var(--accent-primary)]/20 to-[var(--accent-secondary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30 animate-pulse">
+                BETA
+              </span>
             </h1>
             <p className="text-lg md:text-xl text-[var(--text-secondary)] max-w-2xl mx-auto">
               Explore the BitBlocks blockchain with our open-source explorer.
@@ -83,9 +274,11 @@ export default function HomePage() {
 
       {/* Stats Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {statsLoading ? (
             <>
+              <StatsSkeleton />
+              <StatsSkeleton />
               <StatsSkeleton />
               <StatsSkeleton />
               <StatsSkeleton />
@@ -95,61 +288,46 @@ export default function HomePage() {
             <>
               <StatsCard
                 title="Block Height"
-                value={formatNumber(stats?.blockHeight || 0)}
+                value={formatNumber(currentHeight || 0)}
                 icon={Blocks}
                 delay={0}
               />
               <StatsCard
                 title="Masternodes"
-                value={formatNumber(stats?.masternodes || 0)}
+                value={formatNumber(enabledMasternodes)}
+                subtitle={masternodesListLoading && !masternodesList ? 'Loading...' : `${formatNumber(offlineMasternodes)} Offline`}
                 icon={Server}
                 delay={0.1}
               />
               <StatsCard
-                title="Hash Rate"
-                value={stats?.hashRate || '0 H/s'}
-                icon={Cpu}
+                title="BBK Price"
+                value={`$${stats?.price?.toFixed(4) || '0.0000'}`}
+                trend={stats?.priceChange24h ? { value: stats.priceChange24h, isPositive: stats.priceChange24h > 0 } : undefined}
+                icon={TrendingUp}
                 delay={0.2}
               />
               <StatsCard
-                title="Avg Block Time"
-                value={`${stats?.avgBlockTime?.toFixed(1) || 0}s`}
-                icon={Clock}
+                title="Mempool Size"
+                value={formatNumber(stats?.mempoolSize || 0)}
+                subtitle={formatBytes(stats?.mempoolBytes || 0)}
+                icon={Database}
                 delay={0.3}
+              />
+              <StatsCard
+                title="PEERS"
+                value={formatNumber(peersData?.total || 0)}
+                icon={Network}
+                delay={0.4}
+              />
+              <StatsCard
+                title="Transactions"
+                value={formatNumber(totalTransactions || 0)}
+                subtitle="All time"
+                icon={Activity}
+                delay={0.5}
               />
             </>
           )}
-        </div>
-
-        {/* Secondary Stats */}
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatsCard
-            title="BBK Price"
-            value={`$${stats?.price?.toFixed(4) || '0.0000'}`}
-            trend={stats?.priceChange24h ? { value: stats.priceChange24h, isPositive: stats.priceChange24h > 0 } : undefined}
-            icon={TrendingUp}
-            delay={0.4}
-          />
-           <StatsCard
-            title="Mempool Size"
-            value={formatNumber(stats?.mempoolSize || 0)}
-            subtitle={formatBytes(stats?.mempoolBytes || 0)}
-            icon={Database}
-            delay={0.5}
-          />
-          <StatsCard
-            title="Avg Fee"
-            value={`${formatNumber(stats?.avgFee || 0)} sats`}
-            icon={Zap}
-            delay={0.6}
-          />
-          <StatsCard
-            title="Transactions"
-            value={formatNumber(stats?.totalTransactions || 0)}
-            subtitle="All time"
-            icon={Activity}
-            delay={0.7}
-          />
         </div>
       </section>
 
@@ -172,7 +350,7 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {blocksLoading ? (
                 <>
                   <BlockSkeleton />
@@ -180,10 +358,11 @@ export default function HomePage() {
                   <BlockSkeleton />
                   <BlockSkeleton />
                   <BlockSkeleton />
+                  <BlockSkeleton />
                 </>
               ) : (
-                blocks?.map((block, index) => (
-                  <BlockCard key={block.hash} block={block} index={index} />
+                latestBlocks.map((block, index) => (
+                  <BlockCard key={block.hash} block={block} index={index} compact now={now} />
                 ))
               )}
             </div>
@@ -208,76 +387,17 @@ export default function HomePage() {
             <div className="space-y-3">
               {txLoading ? (
                 <>
-                  <TransactionSkeleton />
-                  <TransactionSkeleton />
-                  <TransactionSkeleton />
-                  <TransactionSkeleton />
-                  <TransactionSkeleton />
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <TransactionSkeleton key={i} />
+                  ))}
                 </>
               ) : (
-                transactions?.map((tx, index) => (
+                latestTransactions.map((tx, index) => (
                   <TransactionRow key={tx.txid} transaction={tx} index={index} />
                 ))
               )}
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-12"
-        >
-          <h2 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-4">
-            Open Source & Transparent
-          </h2>
-          <p className="text-[var(--text-secondary)] max-w-2xl mx-auto">
-            BitBlocks Explorer is built with transparency in mind. Explore the code, contribute, and be part of the decentralized future.
-          </p>
-        </motion.div>
-
-        <div className="grid md:grid-cols-3 gap-6">
-          {[
-            {
-              icon: Blocks,
-              title: 'Real-time Data',
-              description: 'Get instant access to the latest blocks and transactions as they happen on the network.',
-            },
-            {
-              icon: Server,
-              title: 'Masternode Stats',
-              description: 'Monitor Masternode health, rewards, and network distribution in real-time.',
-            },
-            {
-              icon: Database,
-              title: 'Full API Access',
-              description: 'Build your own applications using our comprehensive and well-documented API.',
-            },
-          ].map((feature, index) => (
-            <motion.div
-              key={feature.title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              className="card p-6 text-center glow-border"
-            >
-              <div className="inline-flex p-4 rounded-2xl bg-gradient-to-br from-[var(--accent-primary)]/10 to-[var(--accent-secondary)]/10 mb-4">
-                <feature.icon className="w-8 h-8 text-[var(--accent-primary)]" />
-              </div>
-              <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">
-                {feature.title}
-              </h3>
-              <p className="text-sm text-[var(--text-muted)]">
-                {feature.description}
-              </p>
-            </motion.div>
-          ))}
         </div>
       </section>
     </div>

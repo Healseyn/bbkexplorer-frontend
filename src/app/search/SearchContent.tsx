@@ -6,7 +6,8 @@ import { motion } from 'framer-motion';
 import { Search, Blocks, Activity, Wallet, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
-import { search, formatHash } from '@/lib/api';
+import { search, formatHash, getTransactionDetails, getBlockDetails } from '@/lib/api';
+import { detectSearchTypeSync } from '@/lib/search-utils';
 import type { SearchResult } from '@/types';
 
 export default function SearchContent() {
@@ -46,8 +47,65 @@ export default function SearchContent() {
           }
         }
         
+        // If search returns null, try to determine type and navigate directly
+        if (!searchResult) {
+          const detectedType = detectSearchTypeSync(query);
+          if (detectedType === 'address') {
+            router.push(`/address/${query}`);
+            return;
+          } else if (detectedType === 'block-hash' || detectedType === 'transaction-hash') {
+            // For 64-char hex hashes, try transaction first (more common), then block
+            if (query.length === 64 && /^[0-9a-fA-F]+$/.test(query)) {
+              try {
+                await getTransactionDetails(query);
+                router.push(`/tx/${query}`);
+                return;
+              } catch {
+                // Transaction doesn't exist, try as block
+                try {
+                  await getBlockDetails(query);
+                  router.push(`/block/${query}`);
+                  return;
+                } catch {
+                  // Neither transaction nor block found, show no results
+                }
+              }
+            } else if (detectedType === 'transaction-hash') {
+              router.push(`/tx/${query}`);
+              return;
+            }
+          }
+        }
+        
         setResult(searchResult);
       } catch {
+        // If search fails, try to determine type and navigate directly
+        const detectedType = detectSearchTypeSync(query);
+        if (detectedType === 'address') {
+          router.push(`/address/${query}`);
+          return;
+        } else if (detectedType === 'block-hash' || detectedType === 'transaction-hash') {
+          // For 64-char hex hashes, try transaction first (more common), then block
+          if (query.length === 64 && /^[0-9a-fA-F]+$/.test(query)) {
+            try {
+              await getTransactionDetails(query);
+              router.push(`/tx/${query}`);
+              return;
+            } catch {
+              // Transaction doesn't exist, try as block
+              try {
+                await getBlockDetails(query);
+                router.push(`/block/${query}`);
+                return;
+              } catch {
+                // Neither transaction nor block found, show no results
+              }
+            }
+          } else if (detectedType === 'transaction-hash') {
+            router.push(`/tx/${query}`);
+            return;
+          }
+        }
         setResult(null);
       } finally {
         setIsLoading(false);
@@ -163,5 +221,9 @@ export default function SearchContent() {
     </section>
   );
 }
+
+
+
+
 
 

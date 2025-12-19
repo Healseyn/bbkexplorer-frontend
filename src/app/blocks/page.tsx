@@ -1,45 +1,41 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Blocks, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Blocks } from 'lucide-react';
 
 import { BlockCard, BlockSkeleton } from '@/components/ui';
-import { getBlocks, formatNumber } from '@/lib/api';
-
-// Mock data for development
-const generateMockBlocks = (page: number) => ({
-  data: Array.from({ length: 20 }, (_, i) => ({
-    hash: `0000000000000000000${page}${i}abc567def890123456789abcdef0123456789abcdef`,
-    height: 823456 - (page - 1) * 20 - i,
-    timestamp: Date.now() / 1000 - (page - 1) * 20 * 600 - i * 600,
-    txCount: Math.floor(Math.random() * 3000) + 500,
-    size: Math.floor(Math.random() * 1000000) + 500000,
-    weight: Math.floor(Math.random() * 2000000) + 2000000,
-    version: 536870912,
-    merkleRoot: `merkle${page}${i}`,
-    previousBlockHash: `prev${page}${i}`,
-    nonce: Math.floor(Math.random() * 100000000),
-    bits: '17034219',
-    difficulty: 72006146478567.1,
-  })),
-  total: 823456,
-  page,
-  pageSize: 20,
-  hasMore: page * 20 < 823456,
-});
+import { getChainHeight, getLatestNBlocks, formatNumber } from '@/lib/api';
 
 export default function BlocksPage() {
-  const [page, setPage] = useState(1);
+  const limit = 20;
 
-  const { data: blocksData, isLoading } = useQuery({
-    queryKey: ['blocks', page],
-    queryFn: () => getBlocks(page, 20),
-    placeholderData: generateMockBlocks(page),
+  // Update "now" every second to refresh "ago" timestamps in real-time
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Usar React Query compartilhado - otimizado para 15 segundos
+  const { data: height } = useQuery({
+    queryKey: ['chainHeight'],
+    queryFn: getChainHeight,
+    staleTime: 15000, // Cache for 15s
+    refetchInterval: 15000, // Refetch every 15s
   });
 
-  const totalPages = Math.ceil((blocksData?.total || 0) / 20);
+  const { data: blocks, isLoading } = useQuery({
+    queryKey: ['latestBlocks', limit],
+    queryFn: () => getLatestNBlocks(limit),
+    staleTime: 15000, // Cache for 15s
+    refetchInterval: 15000, // Refetch every 15s
+  });
 
   return (
     <div className="min-h-screen">
@@ -55,7 +51,7 @@ export default function BlocksPage() {
                 Blocks
               </h1>
               <p className="text-sm text-[var(--text-muted)] mt-1">
-                {formatNumber(blocksData?.total || 0)} blocks total
+                Chain height: {typeof height === 'number' ? formatNumber(height) : '—'} · Showing latest {limit}
               </p>
             </div>
           </div>
@@ -73,42 +69,13 @@ export default function BlocksPage() {
           {isLoading ? (
             Array.from({ length: 10 }).map((_, i) => <BlockSkeleton key={i} />)
           ) : (
-            blocksData?.data.map((block, index) => (
-              <BlockCard key={block.hash} block={block} index={index} />
-            ))
+            blocks?.map((block, index) => <BlockCard key={block.hash || String(block.height)} block={block} index={index} now={now} />)
           )}
         </motion.div>
-
-        {/* Pagination */}
-        <div className="flex items-center justify-center gap-2 mt-8">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Previous
-          </button>
-          
-          <div className="flex items-center gap-1 px-4">
-            <span className="text-[var(--text-muted)]">Page</span>
-            <span className="text-[var(--text-primary)] font-medium">{page}</span>
-            <span className="text-[var(--text-muted)]">of</span>
-            <span className="text-[var(--text-primary)] font-medium">{formatNumber(totalPages)}</span>
-          </div>
-
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            disabled={!blocksData?.hasMore}
-            className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
       </section>
     </div>
   );
 }
+
 
 

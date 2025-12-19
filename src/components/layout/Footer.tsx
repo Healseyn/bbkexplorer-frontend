@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Github, Twitter, MessageCircle } from 'lucide-react';
+import { ApiStatus } from '@/components/ui';
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
@@ -10,7 +11,7 @@ export default function Footer() {
       { label: 'Blocks', href: '/blocks' },
       { label: 'Transactions', href: '/transactions' },
       { label: 'Masternodes', href: '/masternodes' },
-      { label: 'Mempool', href: '/mempool' },
+      { label: 'Peers', href: '/peers' },
     ],
     resources: [
       { label: 'API Docs', href: '/docs/api' },
@@ -19,7 +20,7 @@ export default function Footer() {
     ],
     community: [
       { label: 'GitHub', href: 'https://github.com/BitBlocksProject/BitBlocks', external: true },
-      { label: 'Twitter', href: 'https://twitter.com/bitblocks', external: true },
+      { label: 'X (Twitter)', href: 'https://x.com/bitblocks', external: true },
       { label: 'Discord', href: 'https://discord.gg/bitblocks', external: true },
     ],
   };
@@ -57,7 +58,7 @@ export default function Footer() {
                 <Github className="w-5 h-5" />
               </a>
               <a
-                href="https://twitter.com/bitblocks"
+                href="https://x.com/bitblocks"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all duration-200"
@@ -139,9 +140,10 @@ export default function Footer() {
         <div className="mt-12 pt-8 border-t border-[var(--border-primary)]">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-sm text-[var(--text-muted)]">
-              © {currentYear} BitBlocks Explorer. Open Source under MIT License.
+              © {currentYear} BitBlocks Explorer.
             </p>
             <div className="flex items-center gap-4">
+              <ApiStatus />
               <Link
                 href="/privacy"
                 className="text-sm text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors duration-200"

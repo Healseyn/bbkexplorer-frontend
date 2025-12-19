@@ -1,177 +1,185 @@
-# BitBlocks Explorer 🔗
+# BitBlocks Explorer (BBK)
 
 <div align="center">
 
-![BitBlocks Explorer](https://img.shields.io/badge/BitBlocks-Explorer-00d4ff?style=for-the-badge&logo=bitcoin&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+![BitBlocks Explorer](https://img.shields.io/badge/BitBlocks-Explorer-blue)
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
+![React](https://img.shields.io/badge/React-19-blue)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+![License](https://img.shields.io/badge/License-Open--Source-green)
 
-**An open-source blockchain explorer with a modern, beautiful interface.**
+**Open-source blockchain explorer for the BitBlocks (BBK) network**
 
-[Demo](#demo) • [Features](#features) • [Installation](#installation) • [Configuration](#configuration) • [API](#api) • [Contributing](#contributing)
+[Features](#-features) • [Installation](#-installation) • [Development](#-development) • [Contributing](#-contributing)
 
 </div>
 
----
+## 📖 About
 
-## ✨ Features
+**BitBlocks Explorer** is a modern, open-source blockchain explorer developed for the BitBlocks (BBK) network. It provides an intuitive and transparent interface to explore blocks, transactions, addresses, masternodes, and other blockchain information.
 
-- 🔍 **Universal Search** - Search by block height, hash, transaction ID, or address
-- 📊 **Network Statistics** - Real-time network stats including hash rate, difficulty, and mempool info
-- 🧱 **Block Explorer** - Browse and inspect block details and transactions
-- 💸 **Transaction Details** - View inputs, outputs, fees, and confirmation status
-- 👛 **Address Tracking** - Check balances, transaction history, and activity
-- 📱 **Responsive Design** - Beautiful UI that works on all devices
-- 🌙 **Dark Theme** - Modern dark theme with cyan/purple accents
-- ⚡ **Fast & Efficient** - Built with Next.js App Router and React Query
+> **⚠️ Important**: This repository contains **only the frontend** of the BitBlocks Explorer. To run a fully functional explorer, you need to set up and run a **separate backend API** that provides the blockchain data. This frontend application consumes data from that backend API through the `NEXT_PUBLIC_API_URL` environment variable.
 
-## 🖼️ Screenshots
+### ✨ Features
 
-The explorer features a modern dark theme with:
-- Gradient accents (cyan to purple)
-- Grid background pattern
-- Smooth animations with Framer Motion
-- JetBrains Mono for hashes and addresses
-- Outfit font for UI text
+- 🔍 **Complete Exploration**: View blocks, transactions, addresses, and masternodes
+- ⚡ **Real-Time**: Real-time updates with API status indicators
+- 🎨 **Modern Interface**: Responsive and modern design with smooth animations
+- 🔎 **Smart Search**: Search by block hash, transaction hash, address, or block height
+- 📊 **Network Statistics**: View real-time BitBlocks network statistics
+- 🌐 **API Health**: Backend API status monitoring
+- 📱 **Responsive**: Works perfectly on desktop, tablet, and mobile
+
+## 🛠️ Tech Stack
+
+- **[Next.js 16](https://nextjs.org/)** - React framework with SSR/SSG
+- **[React 19](https://react.dev/)** - UI library
+- **[TypeScript](https://www.typescriptlang.org/)** - Static typing
+- **[Tailwind CSS 4](https://tailwindcss.com/)** - Utility-first styling
+- **[Framer Motion](https://www.framer.com/motion/)** - Animations
+- **[TanStack Query](https://tanstack.com/query)** - State management and data caching
+- **[Axios](https://axios-http.com/)** - HTTP client
+- **[Lucide React](https://lucide.dev/)** - Icons
+
+## 📋 Prerequisites
+
+- **Node.js** 18.x or higher
+- **npm** or **yarn** or **pnpm**
+- **Backend API**: A running BitBlocks Explorer backend API (this repository is frontend-only)
 
 ## 🚀 Installation
 
-### Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
-- Backend API server (see [API Configuration](#api-configuration))
-
-### Setup
-
 1. **Clone the repository**
+
 ```bash
-git clone https://github.com/bitblocks/explorer.git
-cd explorer
+git clone https://github.com/BitBlocksProject/bbkexplorer.git
+cd bbkexplorer
 ```
 
 2. **Install dependencies**
+
 ```bash
 npm install
+# or
+yarn install
+# or
+pnpm install
 ```
 
-3. **Configure environment**
-```bash
-# Create .env.local file
-echo "NEXT_PUBLIC_API_URL=http://localhost:3001/api" > .env.local
+3. **Configure environment variables**
+
+Create a `.env.local` file in the project root:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3000
 ```
 
-4. **Start development server**
+Or if your API is on another server:
+
+```env
+NEXT_PUBLIC_API_URL=https://api.bitblockscrypto.com
+```
+
+> **⚠️ Important**: You must have a backend API running and accessible at the URL specified in `NEXT_PUBLIC_API_URL`. This frontend will not work without a backend API providing the blockchain data. The API URL can be the root or include `/api` at the end. The system automatically normalizes it.
+
+4. **Run the development server**
+
 ```bash
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
 ```
 
-5. **Open in browser**
+Open [http://localhost:3000](http://localhost:3000) in your browser to see the result.
+
+## 🏗️ Available Scripts
+
+- `npm run dev` - Start the development server
+- `npm run build` - Create a production build
+- `npm run start` - Start the production server (after build)
+- `npm run lint` - Run ESLint linter
+
+## 📁 Project Structure
+
 ```
-http://localhost:3000
+bbkexplorer/
+├── src/
+│   ├── app/              # Routes and pages (App Router)
+│   │   ├── address/      # Address page
+│   │   ├── block/        # Block page
+│   │   ├── blocks/       # Blocks list
+│   │   ├── masternodes/  # Masternodes list
+│   │   ├── transactions/ # Transactions list
+│   │   └── ...
+│   ├── components/       # React components
+│   │   ├── layout/       # Header, Footer
+│   │   └── ui/           # UI components
+│   ├── hooks/            # Custom React hooks
+│   ├── lib/              # Utilities and helpers
+│   │   ├── api.ts        # API client
+│   │   └── block-cache.ts # Caching system
+│   ├── providers/        # Context providers
+│   └── types/            # TypeScript definitions
+├── public/               # Static files
+└── package.json
 ```
 
-## ⚙️ Configuration
+## 🔧 Configuration
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `NEXT_PUBLIC_API_URL` | Backend API endpoint | `http://localhost:3001/api` |
+| `NEXT_PUBLIC_API_URL` | Backend API base URL | `http://localhost:3000` |
 
-### API Configuration
+### Caching System
 
-The explorer expects a backend API with the following endpoints:
+The explorer uses a local caching system (localStorage) to improve performance:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/stats` | GET | Network statistics |
-| `/api/blocks` | GET | List blocks (pagination) |
-| `/api/block/:hashOrHeight` | GET | Block details |
-| `/api/block/:hashOrHeight/transactions` | GET | Block transactions |
-| `/api/transactions` | GET | Recent transactions |
-| `/api/tx/:txid` | GET | Transaction details |
-| `/api/address/:address` | GET | Address details |
-| `/api/address/:address/transactions` | GET | Address transactions |
-| `/api/search` | GET | Search by query |
-| `/api/mempool` | GET | Mempool transactions |
+- **Cache duration**: 7 days
+- **Block limit**: 1000 blocks
+- **Automatic caching**: Only confirmed blocks are cached
+- **Automatic cleanup**: Old cache is automatically removed
 
-## 📁 Project Structure
+## 🌐 Available Pages
 
-```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── page.tsx           # Home page
-│   ├── blocks/            # Blocks list page
-│   ├── block/[hashOrHeight]/ # Block details page
-│   ├── transactions/      # Transactions list page
-│   ├── tx/[txid]/        # Transaction details page
-│   ├── address/[address]/ # Address details page
-│   ├── mempool/          # Mempool page
-│   └── search/           # Search results page
-├── components/
-│   ├── layout/           # Header, Footer
-│   └── ui/               # Reusable UI components
-├── lib/
-│   └── api.ts            # API client and utilities
-├── providers/
-│   └── QueryProvider.tsx # React Query provider
-└── types/
-    └── index.ts          # TypeScript types
-```
-
-## 🛠️ Tech Stack
-
-- **Framework**: [Next.js 15](https://nextjs.org/) with App Router
-- **Language**: [TypeScript](https://www.typescriptlang.org/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-- **Animations**: [Framer Motion](https://www.framer.com/motion/)
-- **Data Fetching**: [TanStack Query](https://tanstack.com/query)
-- **HTTP Client**: [Axios](https://axios-http.com/)
-- **Icons**: [Lucide React](https://lucide.dev/)
-
-## 📝 Scripts
-
-```bash
-# Development
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Lint code
-npm run lint
-```
+- `/` - Home page with statistics and recent blocks
+- `/blocks` - List of all blocks
+- `/block/[hash]` - Details of a specific block
+- `/transactions` - List of transactions
+- `/tx/[hash]` - Details of a transaction
+- `/address/[address]` - Details of an address
+- `/masternodes` - List of masternodes
+- `/peers` - List of network peers
+- `/mempool` - Pending transactions
+- `/privacy` - Privacy policy
+- `/terms` - Terms of service
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Feel free to:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+1. Fork the project
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📄 License
+### Contribution Guidelines
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- Follow existing code standards
+- Add tests when appropriate
+- Document significant changes
+- Keep commits descriptive and organized
 
-## 🙏 Acknowledgments
+## 📝 License
 
-- Inspired by blockchain explorers like [Blockstream.info](https://blockstream.info) and [Mempool.space](https://mempool.space)
-- Built with ❤️ by the BitBlocks community
+This project is open-source. See the `LICENSE` file for more details.
 
----
+## 🔗 Links
 
-<div align="center">
-
-**[⬆ Back to top](#bitblocks-explorer-)**
-
-Made with ☕ and 🎵
-
-</div>
+- **GitHub**: [BitBlocksProject/BitBlocks](https://github.com/BitBlocksProject/BitBlocks)
+- **X (Twitter)**: [@bitblocks](https://x.com/bitblocks)
+- **Discord**: [Discord BitBlocks](https://discord.gg/bitblocks)
