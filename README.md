@@ -181,5 +181,5 @@ This project is open-source. See the `LICENSE` file for more details.
 ## 🔗 Links
 
 - **GitHub**: [BitBlocksProject/BitBlocks](https://github.com/BitBlocksProject/BitBlocks)
-- **X (Twitter)**: [@bitblocks](https://x.com/bitblocks)
+- **X (Twitter)**: [@bitblocks](https://x.com/bitblocks_)
 - **Discord**: [Discord BitBlocks](https://discord.gg/bitblocks)
