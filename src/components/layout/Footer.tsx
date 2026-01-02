@@ -140,7 +140,7 @@ export default function Footer() {
         <div className="mt-12 pt-8 border-t border-[var(--border-primary)]">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-sm text-[var(--text-muted)]">
-              © {currentYear} BitBlocks Explorer.
+              © 2025 - {currentYear} BitBlocks Explorer.
             </p>
             <div className="flex items-center gap-4">
               <ApiStatus />
