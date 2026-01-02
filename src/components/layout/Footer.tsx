@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { Github, Twitter, MessageCircle } from 'lucide-react';
 import { ApiStatus } from '@/components/ui';
 
 export default function Footer() {
@@ -20,8 +19,9 @@ export default function Footer() {
     ],
     community: [
       { label: 'GitHub', href: 'https://github.com/BitBlocksProject/BitBlocks', external: true },
-      { label: 'X (Twitter)', href: 'https://x.com/bitblocks', external: true },
-      { label: 'Discord', href: 'https://discord.gg/bitblocks', external: true },
+      { label: 'X (Twitter)', href: 'https://x.com/BitBlocks_', external: true },
+      { label: 'Discord', href: 'https://discord.gg/Uw9EN3uJ', external: true },
+      { label: 'Telegram', href: 'https://t.me/BitBlocksBrasil', external: true },
     ],
   };
 
@@ -55,7 +55,7 @@ export default function Footer() {
                 rel="noopener noreferrer"
                 className="p-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all duration-200"
               >
-                <Github className="w-5 h-5" />
+                <i className="fa-brands fa-github w-5 h-5"></i>
               </a>
               <a
                 href="https://x.com/bitblocks"
@@ -63,7 +63,7 @@ export default function Footer() {
                 rel="noopener noreferrer"
                 className="p-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all duration-200"
               >
-                <Twitter className="w-5 h-5" />
+                <i className="fa-brands fa-x-twitter w-5 h-5"></i>
               </a>
               <a
                 href="https://discord.gg/bitblocks"
@@ -71,7 +71,15 @@ export default function Footer() {
                 rel="noopener noreferrer"
                 className="p-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all duration-200"
               >
-                <MessageCircle className="w-5 h-5" />
+                <i className="fa-brands fa-discord w-5 h-5"></i>
+              </a>
+              <a
+                href="https://t.me/BitBlocksBrasil"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all duration-200"
+              >
+                <i className="fa-brands fa-telegram w-5 h-5"></i>
               </a>
             </div>
           </div>
