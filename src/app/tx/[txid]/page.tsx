@@ -331,6 +331,33 @@ export default function TransactionDetailPage() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
         >
+          {(tx.blockHeight != null || tx.blockHash) && (
+            <div className="card p-4">
+              <div className="flex items-center gap-2 text-[var(--text-muted)] mb-1">
+                <Blocks className="w-4 h-4" />
+                <span className="text-xs">Block</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {tx.blockHeight != null && (
+                  <Link
+                    href={`/block/${tx.blockHeight}`}
+                    className="text-sm font-medium text-[var(--accent-primary)] hover:underline"
+                  >
+                    #{formatNumber(tx.blockHeight)}
+                  </Link>
+                )}
+                {tx.blockHash && (
+                  <Link
+                    href={`/block/${tx.blockHash}`}
+                    className="hash-text text-xs text-[var(--text-muted)] hover:text-[var(--accent-primary)] truncate max-w-full"
+                    title={tx.blockHash}
+                  >
+                    {formatHash(tx.blockHash, 8)}
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
           <div className="card p-4">
             <div className="flex items-center gap-2 text-[var(--text-muted)] mb-1">
               <Clock className="w-4 h-4" />
