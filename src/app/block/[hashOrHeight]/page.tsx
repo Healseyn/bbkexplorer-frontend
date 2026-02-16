@@ -23,7 +23,7 @@ import {
 import { useState } from 'react';
 
 import { Loading } from '@/components/ui';
-import { getBlockDetails, getTransactionDetails, formatNumber, formatDate, formatBytes, formatHash, formatBBK } from '@/lib/api';
+import { getBlockDetails, getTransactionDetails, formatNumber, formatDate, formatBytes, formatHash, formatBBK, formatDifficulty } from '@/lib/api';
 
 export default function BlockDetailPage() {
   const params = useParams();
@@ -80,7 +80,7 @@ export default function BlockDetailPage() {
     { label: 'Timestamp', value: formatDate(block.timestamp), icon: Clock },
     { label: 'Transactions', value: formatNumber(block.txCount), icon: FileText },
     { label: 'Size', value: formatBytes(block.size), icon: Database },
-    { label: 'Difficulty', value: block.difficulty.toExponential(2), icon: Cpu },
+    { label: 'Difficulty', value: formatDifficulty(block.difficulty), icon: Cpu },
     { label: 'Version', value: `0x${block.version.toString(16)}`, icon: Hash },
     { label: 'Nonce', value: formatNumber(block.nonce), icon: Hash },
     { label: 'Bits', value: block.bits, icon: Hash },

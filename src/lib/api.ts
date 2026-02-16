@@ -592,3 +592,23 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
+
+/** Format block difficulty like Bitcoin explorers: 200k, 72.01m, 1.5b, etc. */
+export function formatDifficulty(difficulty: number): string {
+  if (!Number.isFinite(difficulty) || difficulty < 0) return '0';
+  if (difficulty < 1e3) return formatNumber(Math.round(difficulty));
+  if (difficulty < 1e6) {
+    const v = difficulty / 1e3;
+    return v % 1 === 0 ? `${Math.round(v)}k` : `${v.toFixed(2)}k`;
+  }
+  if (difficulty < 1e9) {
+    const v = difficulty / 1e6;
+    return v % 1 === 0 ? `${Math.round(v)}m` : `${v.toFixed(2)}m`;
+  }
+  if (difficulty < 1e12) {
+    const v = difficulty / 1e9;
+    return v % 1 === 0 ? `${Math.round(v)}b` : `${v.toFixed(2)}b`;
+  }
+  const v = difficulty / 1e12;
+  return v % 1 === 0 ? `${Math.round(v)}t` : `${v.toFixed(2)}t`;
+}
