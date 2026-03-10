@@ -13,6 +13,7 @@ export default function Footer() {
       { label: 'Peers', href: '/peers' },
     ],
     resources: [
+      { label: 'Website', href: 'https://bitblockscrypto.com', external: true },
       { label: 'API Docs', href: '/docs/api' },
       { label: 'FAQ', href: '/faq' },
       { label: 'About', href: '/about' },
@@ -111,12 +112,23 @@ export default function Footer() {
             <ul className="space-y-3">
               {footerLinks.resources.map((link) => (
                 <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors duration-200"
-                  >
-                    {link.label}
-                  </Link>
+                  {'external' in link && link.external ? (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors duration-200"
+                    >
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link
+                      href={link.href}
+                      className="text-sm text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors duration-200"
+                    >
+                      {link.label}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>
