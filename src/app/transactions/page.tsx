@@ -7,7 +7,7 @@ import { Activity, Clock, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
 import { TransactionSkeleton } from '@/components/ui';
-import { getLatestTransactions, formatNumber, formatHash, formatTimeAgo, formatBBK } from '@/lib/api';
+import { getLatestTransactions, formatNumber, formatHash, formatTimeAgo, formatBBKDirect } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 export default function TransactionsPage() {
@@ -120,7 +120,7 @@ export default function TransactionsPage() {
                     <div className="flex items-center gap-6 text-right">
                       <div>
                         <p className="text-sm font-medium text-[var(--text-primary)]">
-                          {formatBBK(tx.totalOutput)} BBK
+                          {formatBBKDirect(tx.totalOutput)} BBK
                         </p>
                       </div>
                       <div className="text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] group-hover:translate-x-1 transition-all">

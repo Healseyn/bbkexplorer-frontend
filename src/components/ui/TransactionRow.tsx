@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Clock, CheckCircle2 } from 'lucide-react';
-import { formatHash, formatTimeAgo, formatBBK, formatNumber } from '@/lib/api';
+import { formatHash, formatTimeAgo, formatBBKDirect, formatNumber } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 interface TransactionRowProps {
@@ -64,7 +64,7 @@ export function TransactionRow({ transaction, index = 0 }: TransactionRowProps) 
             <div className="flex items-center gap-6 text-right">
               <div>
                 <p className="text-sm font-medium text-[var(--text-primary)]">
-                  {formatBBK(transaction.totalOutput)} BBK
+                  {formatBBKDirect(transaction.totalOutput)} BBK
                 </p>
               </div>
               <div className="text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] group-hover:translate-x-1 transition-all duration-300">
