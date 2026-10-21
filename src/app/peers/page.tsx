@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Network,
@@ -23,79 +23,68 @@ import type { Peer } from '@/types';
 type SortColumn = 'addr' | 'network' | 'version' | 'lastseen' | 'connectionDuration' | 'banscore';
 type SortDirection = 'asc' | 'desc';
 
+// Determine network type from address
+function getNetworkType(addr: string): 'ipv4' | 'ipv6' {
+  // Remove port if present (format: [ip]:port or ip:port)
+  let ipPart = addr;
+  if (addr.includes('[') && addr.includes(']')) {
+    // IPv6 with brackets: [2001:db8::1]:8333
+    ipPart = addr.substring(addr.indexOf('[') + 1, addr.indexOf(']'));
+  } else if (addr.includes(':')) {
+    // Could be IPv4:port or IPv6:port
+    const lastColonIndex = addr.lastIndexOf(':');
+    ipPart = addr.substring(0, lastColonIndex);
+  }
+
+  // Check for IPv6 patterns:
+  // 1. Contains multiple colons (IPv6 characteristic)
+  const colonCount = (ipPart.match(/:/g) || []).length;
+  if (colonCount > 1) {
+    return 'ipv6';
+  }
+
+  // 2. Contains double colon (::) which is IPv6 shorthand
+  if (ipPart.includes('::')) {
+    return 'ipv6';
+  }
+
+  // 3. Check if it's a valid IPv4 format (4 numbers separated by dots)
+  const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+  if (ipv4Pattern.test(ipPart)) {
+    return 'ipv4';
+  }
+
+  // 4. If it contains hexadecimal characters and colons, it's likely IPv6
+  const hexPattern = /[0-9a-fA-F:]+/;
+  if (hexPattern.test(ipPart) && colonCount >= 1) {
+    return 'ipv6';
+  }
+
+  // Default to IPv4 for backward compatibility
+  return 'ipv4';
+}
+
+// Determine if peer is active (lastseen within 1 week of when the list was fetched)
+function isPeerActive(peer: Peer, referenceMs: number): boolean {
+  const oneWeekAgo = Math.floor(referenceMs / 1000) - (7 * 24 * 60 * 60); // 1 week in seconds
+  // Normalize timestamp: if it's > 1e10, it's in milliseconds, convert to seconds
+  const lastseenSeconds = peer.lastseen > 1e10 ? Math.floor(peer.lastseen / 1000) : peer.lastseen;
+  return lastseenSeconds >= oneWeekAgo;
+}
+
 export default function PeersPage() {
   const [activeTab, setActiveTab] = useState<'active' | 'inactive'>('active');
   const [networkFilter, setNetworkFilter] = useState<'all' | 'ipv4' | 'ipv6'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [currentTime, setCurrentTime] = useState(Date.now());
-
-  // Update current time every 10 seconds to refresh "Last Seen" timestamps in real-time
-  // This only updates the display, no API call is made
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 10000); // Update every 10 seconds for real-time feel
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Fetch peers list
-  const { data: peersData, isLoading: listLoading } = useQuery({
+  const { data: peersData, isLoading: listLoading, dataUpdatedAt } = useQuery({
     queryKey: ['peers'],
     queryFn: getPeers,
     refetchInterval: 60000, // Refetch every 60 seconds
   });
-
-  // Determine network type from address
-  const getNetworkType = (addr: string): 'ipv4' | 'ipv6' => {
-    // Remove port if present (format: [ip]:port or ip:port)
-    let ipPart = addr;
-    if (addr.includes('[') && addr.includes(']')) {
-      // IPv6 with brackets: [2001:db8::1]:8333
-      ipPart = addr.substring(addr.indexOf('[') + 1, addr.indexOf(']'));
-    } else if (addr.includes(':')) {
-      // Could be IPv4:port or IPv6:port
-      const lastColonIndex = addr.lastIndexOf(':');
-      ipPart = addr.substring(0, lastColonIndex);
-    }
-    
-    // Check for IPv6 patterns:
-    // 1. Contains multiple colons (IPv6 characteristic)
-    const colonCount = (ipPart.match(/:/g) || []).length;
-    if (colonCount > 1) {
-      return 'ipv6';
-    }
-    
-    // 2. Contains double colon (::) which is IPv6 shorthand
-    if (ipPart.includes('::')) {
-      return 'ipv6';
-    }
-    
-    // 3. Check if it's a valid IPv4 format (4 numbers separated by dots)
-    const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
-    if (ipv4Pattern.test(ipPart)) {
-      return 'ipv4';
-    }
-    
-    // 4. If it contains hexadecimal characters and colons, it's likely IPv6
-    const hexPattern = /[0-9a-fA-F:]+/;
-    if (hexPattern.test(ipPart) && colonCount >= 1) {
-      return 'ipv6';
-    }
-    
-    // Default to IPv4 for backward compatibility
-    return 'ipv4';
-  };
-
-  // Determine if peer is active (lastseen within 1 week)
-  const isPeerActive = (peer: Peer): boolean => {
-    const oneWeekAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60); // 1 week in seconds
-    // Normalize timestamp: if it's > 1e10, it's in milliseconds, convert to seconds
-    const lastseenSeconds = peer.lastseen > 1e10 ? Math.floor(peer.lastseen / 1000) : peer.lastseen;
-    return lastseenSeconds >= oneWeekAgo;
-  };
 
   // Handle column sort
   const handleSort = (column: SortColumn) => {
@@ -115,7 +104,7 @@ export default function PeersPage() {
     
     // First filter by active/inactive
     const peersByStatus = peersData.peers.filter((peer: Peer) => {
-      const isActive = isPeerActive(peer);
+      const isActive = isPeerActive(peer, dataUpdatedAt);
       return activeTab === 'active' ? isActive : !isActive;
     });
     
@@ -186,18 +175,18 @@ export default function PeersPage() {
     });
 
     return sorted;
-  }, [peersData, activeTab, networkFilter, searchQuery, sortColumn, sortDirection]);
+  }, [peersData, dataUpdatedAt, activeTab, networkFilter, searchQuery, sortColumn, sortDirection]);
 
   // Calculate stats
   const activeCount = useMemo(() => {
     if (!peersData) return 0;
-    return peersData.peers.filter((p: Peer) => isPeerActive(p)).length;
-  }, [peersData]);
+    return peersData.peers.filter((p: Peer) => isPeerActive(p, dataUpdatedAt)).length;
+  }, [peersData, dataUpdatedAt]);
 
   const inactiveCount = useMemo(() => {
     if (!peersData) return 0;
-    return peersData.peers.filter((p: Peer) => !isPeerActive(p)).length;
-  }, [peersData]);
+    return peersData.peers.filter((p: Peer) => !isPeerActive(p, dataUpdatedAt)).length;
+  }, [peersData, dataUpdatedAt]);
 
   const ipv4Count = useMemo(() => {
     if (!peersData) return 0;
@@ -446,7 +435,7 @@ export default function PeersPage() {
                   </tr>
                 ) : (
                   filteredPeers.map((peer, index) => (
-                    <PeerRow key={peer.id} peer={peer} index={index} currentTime={currentTime} />
+                    <PeerRow key={peer.id} peer={peer} index={index} />
                   ))
                 )}
               </tbody>

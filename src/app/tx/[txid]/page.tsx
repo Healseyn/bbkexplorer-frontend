@@ -127,7 +127,8 @@ export default function TransactionDetailPage() {
     });
 
     // Determine timestamp
-    const timestamp = blocktime || time || Math.floor(Date.now() / 1000);
+    // 0 for mempool transactions without a time yet
+    const timestamp = blocktime || time || 0;
 
     // A transaction is confirmed only when it has 6 or more confirmations (same as blocks)
     const confirmed = confirmations >= 6;
@@ -331,7 +332,7 @@ export default function TransactionDetailPage() {
               <Clock className="w-4 h-4" />
               <span className="text-xs">Timestamp</span>
             </div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">{formatDate(tx.timestamp)}</p>
+            <p className="text-sm font-medium text-[var(--text-primary)]">{tx.timestamp > 0 ? formatDate(tx.timestamp) : 'Pending'}</p>
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-2 text-[var(--text-muted)] mb-1">

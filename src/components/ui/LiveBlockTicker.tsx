@@ -6,7 +6,8 @@ import { Box } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Block } from '@/types';
-import { formatTimeAgo, getLatestBlock } from '@/lib/api';
+import { getLatestBlock } from '@/lib/api';
+import { TimeAgo } from './TimeAgo';
 
 interface LiveBlockTickerProps {
   initialBlocks?: Block[];
@@ -14,16 +15,6 @@ interface LiveBlockTickerProps {
 
 export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
-  const [now, setNow] = useState(Date.now());
-
-  // Update "now" every second to refresh "ago" timestamps in real-time
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Usar React Query compartilhado - otimizado para 15 segundos
   const { data: latestBlock } = useQuery({
@@ -87,7 +78,7 @@ export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
                           #{block.height}
                         </span>
                         <span className="text-xs text-[var(--text-muted)]">
-                          {formatTimeAgo(block.timestamp, now)} • {block.txCount} txs
+                          <TimeAgo timestamp={block.timestamp} /> • {block.txCount} txs
                         </span>
                       </div>
                     </Link>

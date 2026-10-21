@@ -22,16 +22,6 @@ import { getMempoolStats, getLatestNBlocks, getLatestTransactions, getChainHeigh
 import type { Transaction, Block } from '@/types';
 
 export default function HomePage() {
-  // Update "now" every second to refresh "ago" timestamps in real-time
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Fetch mempool size (the backend has no aggregated /api/stats endpoint)
   const { data: mempool } = useQuery({
@@ -350,7 +340,7 @@ export default function HomePage() {
                 </>
               ) : (
                 latestBlocks.map((block, index) => (
-                  <BlockCard key={block.hash} block={block} index={index} compact now={now} />
+                  <BlockCard key={block.hash} block={block} index={index} compact />
                 ))
               )}
             </div>

@@ -1,25 +1,15 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, Clock, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
-import { TransactionSkeleton } from '@/components/ui';
-import { getLatestTransactions, formatNumber, formatHash, formatTimeAgo, formatBBKDirect } from '@/lib/api';
+import { TransactionSkeleton, TimeAgo } from '@/components/ui';
+import { getLatestTransactions, formatNumber, formatHash, formatBBKDirect } from '@/lib/api';
 import type { Transaction } from '@/types';
 
 export default function TransactionsPage() {
-  const [now, setNow] = useState(Date.now());
-
-  // Update "now" every second for real-time timestamps
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Get latest transactions from the recent endpoint - otimizado para 15 segundos (mesmo intervalo dos blocos)
   const { data: transactions, isLoading } = useQuery({
@@ -97,7 +87,7 @@ export default function TransactionsPage() {
                         </div>
                         <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
                           <Clock className="w-3 h-3" />
-                          <span>{formatTimeAgo(tx.timestamp, now)}</span>
+                          <span><TimeAgo timestamp={tx.timestamp} /></span>
                           {tx.blockHeight && (
                             <>
                               <span>•</span>
