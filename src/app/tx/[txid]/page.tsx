@@ -66,10 +66,11 @@ export default function TransactionDetailPage() {
       return sum + getValueInSatoshis(value || 0);
     }, 0);
 
-    const fee = totalInput > 0 && totalOutput > 0 ? totalInput - totalOutput : 0;
-    const feeRate = size > 0 ? fee / size : 0;
     const isCoinbase = vin.length > 0 && !!vin[0].coinbase;
     const isStaking = !isCoinbase && totalOutput > totalInput && totalInput > 0;
+    // Coinbase and coinstake create coins (outputs > inputs), so they pay no fee
+    const fee = !isCoinbase && !isStaking && totalInput > 0 ? Math.max(0, totalInput - totalOutput) : 0;
+    const feeRate = size > 0 ? fee / size : 0;
 
     // Map inputs
     const inputs = vin.map((input, index) => {
@@ -291,9 +292,11 @@ export default function TransactionDetailPage() {
               <p className="text-2xl font-bold text-[var(--text-primary)]">
                 {formatBBK(tx.totalOutput)} <span className="text-[var(--accent-primary)]">BBK</span>
               </p>
-              <p className="text-sm text-[var(--text-muted)]">
-                Fee: {formatNumber(tx.fee)} sats ({tx.feeRate.toFixed(1)} sat/vB)
-              </p>
+              {!tx.isCoinbase && !tx.isStaking && (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Fee: {formatNumber(tx.fee)} sats ({tx.feeRate.toFixed(1)} sat/vB)
+                </p>
+              )}
             </div>
           </div>
         </div>
