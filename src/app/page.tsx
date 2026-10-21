@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   Blocks,
   Activity,
-  TrendingUp,
+  Cpu,
   Clock,
   Database,
   ArrowRight,
@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 import { SearchBar, StatsCard, BlockCard, TransactionRow, StatsSkeleton, BlockSkeleton, TransactionSkeleton, LiveBlockTicker } from '@/components/ui';
-import { getNetworkStats, getLatestNBlocks, getLatestTransactions, getChainHeight, getLatestBlock, formatNumber, formatBytes, getMasternodesList, getTransactionsTotal, getPeers } from '@/lib/api';
+import { getMempoolStats, getLatestNBlocks, getLatestTransactions, getChainHeight, getLatestBlock, formatNumber, formatBytes, formatDifficulty, getMasternodesList, getTransactionsTotal, getPeers } from '@/lib/api';
 import type { Transaction, Block } from '@/types';
 
 export default function HomePage() {
@@ -33,10 +33,11 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch network stats
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['networkStats'],
-    queryFn: getNetworkStats,
+  // Fetch mempool size (the backend has no aggregated /api/stats endpoint)
+  const { data: mempool } = useQuery({
+    queryKey: ['mempoolStats'],
+    queryFn: getMempoolStats,
+    refetchInterval: 15000, // Refetch every 15s
   });
 
   // Fetch masternodes list to count enabled
@@ -62,33 +63,21 @@ export default function HomePage() {
 
   // Calculate enabled masternodes count
   const enabledMasternodes = useMemo(() => {
-    // Try stats.masternodes.enabled first
-    if (stats?.masternodes?.enabled !== undefined && stats.masternodes.enabled !== null) {
-      return stats.masternodes.enabled;
-    }
-    // Fallback: count enabled masternodes from the list
+    // Count enabled masternodes from the list
     if (masternodesList?.active) {
       return masternodesList.active.filter(mn => mn.status === 'ENABLED').length;
     }
     return 0;
-  }, [stats?.masternodes?.enabled, masternodesList?.active]);
+  }, [masternodesList?.active]);
 
   // Calculate offline masternodes count
   const offlineMasternodes = useMemo(() => {
     // Calculate from masternodes list (inactive masternodes)
-    if (masternodesList?.inactive) {
-      return masternodesList.inactive.length;
-    }
-    // Fallback: total - enabled
-    const total = stats?.masternodes?.total || 0;
-    if (total > 0 && enabledMasternodes > 0) {
-      return total - enabledMasternodes;
-    }
-    return 0;
-  }, [masternodesList?.inactive, stats?.masternodes?.total, enabledMasternodes]);
+    return masternodesList?.inactive?.length ?? 0;
+  }, [masternodesList?.inactive]);
 
   // Fetch current chain height - otimizado para 15 segundos
-  const { data: currentHeight } = useQuery({
+  const { data: currentHeight, isLoading: heightLoading } = useQuery({
     queryKey: ['chainHeight'],
     queryFn: getChainHeight,
     staleTime: 15000, // Cache for 15s
@@ -275,7 +264,7 @@ export default function HomePage() {
       {/* Stats Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {statsLoading ? (
+          {heightLoading ? (
             <>
               <StatsSkeleton />
               <StatsSkeleton />
@@ -300,16 +289,15 @@ export default function HomePage() {
                 delay={0.1}
               />
               <StatsCard
-                title="BBK Price"
-                value={`$${stats?.price?.toFixed(4) || '0.0000'}`}
-                trend={stats?.priceChange24h ? { value: stats.priceChange24h, isPositive: stats.priceChange24h > 0 } : undefined}
-                icon={TrendingUp}
+                title="Difficulty"
+                value={latestBlock ? formatDifficulty(latestBlock.difficulty) : '—'}
+                icon={Cpu}
                 delay={0.2}
               />
               <StatsCard
                 title="Mempool Size"
-                value={formatNumber(stats?.mempoolSize || 0)}
-                subtitle={formatBytes(stats?.mempoolBytes || 0)}
+                value={formatNumber(mempool?.size || 0)}
+                subtitle={formatBytes(mempool?.bytes || 0)}
                 icon={Database}
                 delay={0.3}
               />

@@ -6,7 +6,6 @@ import type {
   TransactionOutput,
   Address,
   AddressTransaction,
-  NetworkStats,
   PaginatedResponse,
   SearchResult,
   MempoolTransaction,
@@ -51,12 +50,6 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-// Network Stats
-export async function getNetworkStats(): Promise<NetworkStats> {
-  const { data } = await api.get<ApiResponse<NetworkStats>>('/api/stats');
-  return unwrap(data);
-}
 
 // API Health
 export async function getApiHealth(): Promise<ApiHealth> {
@@ -252,6 +245,19 @@ export async function getMempoolTxids(verbose = false): Promise<string[] | Recor
     params: { verbose: verbose ? 'true' : 'false' },
   });
   return unwrap(data);
+}
+
+// Mempool transaction count and total size, from the verbose mempool listing
+export async function getMempoolStats(): Promise<{ size: number; bytes: number }> {
+  const mempool = await getMempoolTxids(true);
+  if (Array.isArray(mempool)) {
+    return { size: mempool.length, bytes: 0 };
+  }
+  const entries = Object.values(mempool) as Array<{ size?: number }>;
+  return {
+    size: entries.length,
+    bytes: entries.reduce((sum, entry) => sum + (typeof entry?.size === 'number' ? entry.size : 0), 0),
+  };
 }
 
 // ===== Backend-contract endpoints (current BitBlocks Explorer API) =====
