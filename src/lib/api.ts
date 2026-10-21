@@ -7,7 +7,6 @@ import type {
   Address,
   AddressTransaction,
   PaginatedResponse,
-  SearchResult,
   MempoolTransaction,
   Masternode,
   MasternodesListResponse,
@@ -213,18 +212,6 @@ export async function getPeers(): Promise<PeersResponse> {
 export async function getStakingStatus(): Promise<StakingStatus> {
   const { data } = await api.get<ApiResponse<StakingStatus>>('/api/staking/status');
   return unwrap(data);
-}
-
-// Search
-export async function search(query: string): Promise<SearchResult | null> {
-  try {
-    const { data } = await api.get<ApiResponse<SearchResult>>('/api/search', {
-      params: { q: query },
-    });
-    return unwrap(data);
-  } catch {
-    return null;
-  }
 }
 
 // Mempool
