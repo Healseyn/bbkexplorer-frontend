@@ -118,8 +118,8 @@ export default function TermsOfServicePage() {
         >
           <div className="card p-6 mb-6">
             <p className="text-[var(--text-secondary)] leading-relaxed mb-4">
-              Please read these Terms of Service ("Terms") carefully before using BitBlocks Explorer
-              ("the Service", "we", "us", or "our"). These Terms constitute a legally binding
+              Please read these Terms of Service (&quot;Terms&quot;) carefully before using BitBlocks Explorer
+              (&quot;the Service&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;). These Terms constitute a legally binding
               agreement between you and BitBlocks Explorer.
             </p>
             <p className="text-[var(--text-secondary)] leading-relaxed">

@@ -3,17 +3,17 @@
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { Peer } from '@/types';
-import { formatTimeAgo, formatHash } from '@/lib/api';
+import { formatHash } from '@/lib/api';
+import { TimeAgo } from './TimeAgo';
 import { Copy, Check } from 'lucide-react';
 import { useState } from 'react';
 
 interface PeerRowProps {
   peer: Peer;
   index?: number;
-  currentTime?: number;
 }
 
-export function PeerRow({ peer, index = 0, currentTime }: PeerRowProps) {
+export function PeerRow({ peer, index = 0 }: PeerRowProps) {
   const [copied, setCopied] = useState(false);
 
   const copyAddress = (e: React.MouseEvent) => {
@@ -104,7 +104,7 @@ export function PeerRow({ peer, index = 0, currentTime }: PeerRowProps) {
         {peer.subver}
       </td>
       <td className="py-4 px-4 text-sm text-[var(--text-secondary)]">
-        {formatTimeAgo(peer.lastseen, currentTime)}
+        <TimeAgo timestamp={peer.lastseen} />
       </td>
       <td className="py-4 px-4 text-sm text-[var(--text-secondary)]">
         {peer.connectionDurationFormatted}

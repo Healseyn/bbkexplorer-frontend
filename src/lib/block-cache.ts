@@ -1,7 +1,8 @@
 import type { Block } from '@/types';
 
 const CACHE_KEY_PREFIX = 'bbkexplorer_block_';
-const CACHE_VERSION = '1';
+const CACHE_VERSION = '2'; // v1 cached blocks with a single confirmation
+const MIN_CACHE_CONFIRMATIONS = 10; // Same threshold the backend uses to persist blocks
 const MAX_CACHE_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 const MAX_CACHED_BLOCKS = 1000; // Limitar número de blocos em cache
 
@@ -16,6 +17,7 @@ function devWarn(message: string, error?: unknown): void {
 
 interface CachedBlock {
   block: Block;
+  txids?: string[];
   cachedAt: number;
   version: string;
 }
@@ -28,21 +30,18 @@ function getCacheKey(identifier: string | number): string {
 }
 
 /**
- * Verifica se um bloco está confirmado (não é o latest e tem confirmations > 0)
+ * Verifica se um bloco tem confirmações suficientes para não ser afetado por um reorg
  */
 function isBlockConfirmed(block: Block, currentHeight?: number): boolean {
-  // Se temos currentHeight, podemos verificar confirmations
-  if (currentHeight !== undefined) {
-    return block.confirmations > 0;
-  }
-  // Caso contrário, assumimos que blocos com confirmations > 0 estão confirmados
-  return block.confirmations > 0;
+  const confirmations =
+    currentHeight !== undefined ? currentHeight - block.height + 1 : block.confirmations;
+  return confirmations >= MIN_CACHE_CONFIRMATIONS;
 }
 
 /**
  * Salva um bloco no cache se estiver confirmado
  */
-export function cacheBlock(block: Block, currentHeight?: number): void {
+export function cacheBlock(block: Block, currentHeight?: number, txids?: string[]): void {
   if (typeof window === 'undefined') return; // SSR safety
   
   // Só cachear blocos confirmados
@@ -53,6 +52,7 @@ export function cacheBlock(block: Block, currentHeight?: number): void {
   try {
     const cached: CachedBlock = {
       block,
+      txids,
       cachedAt: Date.now(),
       version: CACHE_VERSION,
     };
@@ -75,9 +75,9 @@ export function cacheBlock(block: Block, currentHeight?: number): void {
 }
 
 /**
- * Busca um bloco do cache
+ * Busca um bloco (e seus txids, se conhecidos) do cache
  */
-export function getCachedBlock(identifier: string | number): Block | null {
+export function getCachedBlock(identifier: string | number): { block: Block; txids?: string[] } | null {
   if (typeof window === 'undefined') return null; // SSR safety
 
   try {
@@ -101,7 +101,7 @@ export function getCachedBlock(identifier: string | number): Block | null {
       return null;
     }
 
-    return cached.block;
+    return { block: cached.block, txids: cached.txids };
   } catch (error) {
     // Cache corrompido ou erro de parsing
     devWarn('Failed to read cached block:', error);

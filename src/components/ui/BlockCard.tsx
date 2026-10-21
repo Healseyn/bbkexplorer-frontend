@@ -3,17 +3,17 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Blocks, Clock, FileText } from 'lucide-react';
-import { formatHash, formatTimeAgo, formatNumber } from '@/lib/api';
+import { formatHash, formatNumber } from '@/lib/api';
+import { TimeAgo } from './TimeAgo';
 import type { Block } from '@/types';
 
 interface BlockCardProps {
   block: Block;
   index?: number;
   compact?: boolean;
-  now?: number; // Optional current timestamp in ms for real-time updates
 }
 
-export function BlockCard({ block, index = 0, compact = false, now }: BlockCardProps) {
+export function BlockCard({ block, index = 0, compact = false }: BlockCardProps) {
   const confirmations = block.confirmations || 0;
   const isUnconfirmed = confirmations < 6;
   const confirmationText = isUnconfirmed ? `${confirmations}/6` : 'Confirmed';
@@ -59,7 +59,7 @@ export function BlockCard({ block, index = 0, compact = false, now }: BlockCardP
               </div>
               <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
                 <Clock className="w-3.5 h-3.5" />
-                <span>{formatTimeAgo(block.timestamp, now)}</span>
+                <span><TimeAgo timestamp={block.timestamp} /></span>
               </div>
             </div>
 
@@ -77,7 +77,7 @@ export function BlockCard({ block, index = 0, compact = false, now }: BlockCardP
             </div>
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              <span>{formatTimeAgo(block.timestamp, now)}</span>
+              <span><TimeAgo timestamp={block.timestamp} /></span>
             </div>
           </div>
         </div>

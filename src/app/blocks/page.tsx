@@ -1,7 +1,6 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Blocks } from 'lucide-react';
 
@@ -11,16 +10,6 @@ import { getChainHeight, getLatestNBlocks, formatNumber } from '@/lib/api';
 export default function BlocksPage() {
   const limit = 20;
 
-  // Update "now" every second to refresh "ago" timestamps in real-time
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Usar React Query compartilhado - otimizado para 15 segundos
   const { data: height } = useQuery({
@@ -69,7 +58,7 @@ export default function BlocksPage() {
           {isLoading ? (
             Array.from({ length: 10 }).map((_, i) => <BlockSkeleton key={i} />)
           ) : (
-            blocks?.map((block, index) => <BlockCard key={block.hash || String(block.height)} block={block} index={index} now={now} />)
+            blocks?.map((block, index) => <BlockCard key={block.hash || String(block.height)} block={block} index={index} />)
           )}
         </motion.div>
       </section>

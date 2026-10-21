@@ -1,30 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Box } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Block } from '@/types';
-import { formatTimeAgo, getLatestBlock } from '@/lib/api';
+import { getLatestBlock } from '@/lib/api';
+import { mergeLatestBlocks } from '@/lib/live-blocks';
+import { TimeAgo } from './TimeAgo';
 
 interface LiveBlockTickerProps {
   initialBlocks?: Block[];
 }
 
 export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
-  const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
-  const [now, setNow] = useState(Date.now());
-
-  // Update "now" every second to refresh "ago" timestamps in real-time
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
   // Usar React Query compartilhado - otimizado para 15 segundos
   const { data: latestBlock } = useQuery({
     queryKey: ['latestBlock'],
@@ -33,26 +22,8 @@ export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
     refetchInterval: 15000, // Refetch every 15s
   });
 
-  // Initialize with initialBlocks
-  useEffect(() => {
-    if (initialBlocks.length > 0 && blocks.length === 0) {
-      setBlocks(initialBlocks.slice(0, 5));
-    }
-  }, [initialBlocks, blocks.length]);
-
-  // Update blocks when latestBlock changes (via React Query compartilhado)
-  useEffect(() => {
-    if (!latestBlock) return;
-    
-    setBlocks((prev) => {
-      // If we already have this block (by hash or height), don't update
-      const exists = prev.some((b) => b.hash === latestBlock.hash || b.height === latestBlock.height);
-      if (exists) return prev;
-      
-      // Add new block at the front, keep max 5 blocks
-      return [latestBlock, ...prev].slice(0, 5);
-    });
-  }, [latestBlock]);
+  // Derived on every render: the latest block may be newer than initialBlocks
+  const blocks = mergeLatestBlocks(latestBlock, initialBlocks, 5);
 
   return (
     <div className="w-full bg-[var(--bg-secondary)]/50 border-y border-[var(--border-primary)] backdrop-blur-sm overflow-hidden">
@@ -66,7 +37,7 @@ export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
           <div className="flex-1 overflow-hidden relative">
             <div className="flex gap-4">
               <AnimatePresence mode="popLayout" initial={false}>
-                {blocks.slice(0, 5).map((block) => (
+                {blocks.map((block) => (
                   <motion.div
                     key={`${block.height}-${block.hash}`}
                     initial={{ opacity: 0, x: -50, scale: 0.9 }}
@@ -87,7 +58,7 @@ export function LiveBlockTicker({ initialBlocks = [] }: LiveBlockTickerProps) {
                           #{block.height}
                         </span>
                         <span className="text-xs text-[var(--text-muted)]">
-                          {formatTimeAgo(block.timestamp, now)} • {block.txCount} txs
+                          <TimeAgo timestamp={block.timestamp} /> • {block.txCount} txs
                         </span>
                       </div>
                     </Link>

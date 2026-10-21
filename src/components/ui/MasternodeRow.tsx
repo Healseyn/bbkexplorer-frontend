@@ -3,7 +3,8 @@
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { Masternode } from '@/types';
-import { formatTimeAgo, formatHash } from '@/lib/api';
+import { formatHash } from '@/lib/api';
+import { TimeAgo } from './TimeAgo';
 import { MasternodeStatusBadge } from './MasternodeStatusBadge';
 import { Copy, Check } from 'lucide-react';
 import { useState } from 'react';
@@ -68,10 +69,10 @@ export function MasternodeRow({ masternode, index = 0, showOfflineTime = false }
         {masternode.network}
       </td>
       <td className="py-4 px-4 text-sm text-[var(--text-secondary)]">
-        {formatTimeAgo(masternode.lastseen)}
+        <TimeAgo timestamp={masternode.lastseen} />
       </td>
       <td className="py-4 px-4 text-sm text-[var(--text-secondary)]">
-        {masternode.lastpaid !== null ? formatTimeAgo(masternode.lastpaid) : 'Never'}
+        {masternode.lastpaid !== null ? <TimeAgo timestamp={masternode.lastpaid} /> : 'Never'}
       </td>
       <td className="py-4 px-4 text-sm text-[var(--text-secondary)] text-right">
         {formatDuration(masternode.activeTime)}

@@ -1,42 +1,28 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
   Blocks,
   Activity,
-  TrendingUp,
-  Clock,
+  Cpu,
   Database,
   ArrowRight,
-  Zap,
   Server,
-  Globe,
   Network,
 } from 'lucide-react';
 
 import { SearchBar, StatsCard, BlockCard, TransactionRow, StatsSkeleton, BlockSkeleton, TransactionSkeleton, LiveBlockTicker } from '@/components/ui';
-import { getNetworkStats, getLatestNBlocks, getLatestTransactions, getChainHeight, getLatestBlock, formatNumber, formatBytes, getMasternodesList, getTransactionsTotal, getPeers } from '@/lib/api';
-import type { Transaction, Block } from '@/types';
+import { getMempoolStats, getLatestNBlocks, getLatestTransactions, getChainHeight, getLatestBlock, formatNumber, formatBytes, formatDifficulty, getMasternodesList, getTransactionsTotal, getPeers } from '@/lib/api';
+import { mergeLatestBlocks } from '@/lib/live-blocks';
 
 export default function HomePage() {
-  // Update "now" every second to refresh "ago" timestamps in real-time
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Fetch network stats
-  const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['networkStats'],
-    queryFn: getNetworkStats,
+  // Fetch mempool size (the backend has no aggregated /api/stats endpoint)
+  const { data: mempool } = useQuery({
+    queryKey: ['mempoolStats'],
+    queryFn: getMempoolStats,
+    refetchInterval: 15000, // Refetch every 15s
   });
 
   // Fetch masternodes list to count enabled
@@ -47,48 +33,29 @@ export default function HomePage() {
   });
 
   // Fetch total transactions count
-  const { data: totalTransactions, isLoading: totalTransactionsLoading } = useQuery({
+  const { data: totalTransactions } = useQuery({
     queryKey: ['transactionsTotal'],
     queryFn: getTransactionsTotal,
     refetchInterval: 60000, // Refetch every 60 seconds
   });
 
   // Fetch peers count
-  const { data: peersData, isLoading: peersLoading } = useQuery({
+  const { data: peersData } = useQuery({
     queryKey: ['peers'],
     queryFn: getPeers,
     refetchInterval: 60000, // Refetch every 60 seconds
   });
 
   // Calculate enabled masternodes count
-  const enabledMasternodes = useMemo(() => {
-    // Try stats.masternodes.enabled first
-    if (stats?.masternodes?.enabled !== undefined && stats.masternodes.enabled !== null) {
-      return stats.masternodes.enabled;
-    }
-    // Fallback: count enabled masternodes from the list
-    if (masternodesList?.active) {
-      return masternodesList.active.filter(mn => mn.status === 'ENABLED').length;
-    }
-    return 0;
-  }, [stats?.masternodes?.enabled, masternodesList?.active]);
+  const enabledMasternodes = masternodesList?.active
+    ? masternodesList.active.filter((mn) => mn.status === 'ENABLED').length
+    : 0;
 
   // Calculate offline masternodes count
-  const offlineMasternodes = useMemo(() => {
-    // Calculate from masternodes list (inactive masternodes)
-    if (masternodesList?.inactive) {
-      return masternodesList.inactive.length;
-    }
-    // Fallback: total - enabled
-    const total = stats?.masternodes?.total || 0;
-    if (total > 0 && enabledMasternodes > 0) {
-      return total - enabledMasternodes;
-    }
-    return 0;
-  }, [masternodesList?.inactive, stats?.masternodes?.total, enabledMasternodes]);
+  const offlineMasternodes = masternodesList?.inactive?.length ?? 0;
 
   // Fetch current chain height - otimizado para 15 segundos
-  const { data: currentHeight } = useQuery({
+  const { data: currentHeight, isLoading: heightLoading } = useQuery({
     queryKey: ['chainHeight'],
     queryFn: getChainHeight,
     staleTime: 15000, // Cache for 15s
@@ -112,59 +79,6 @@ export default function HomePage() {
     refetchInterval: 15000, // Refetch every 15s
   });
 
-  // Live blocks state - atualizado via React Query
-  const [liveBlocks, setLiveBlocks] = useState<Block[]>([]);
-
-  // Initialize with fetched blocks
-  useEffect(() => {
-    if (Array.isArray(initialBlocks) && initialBlocks.length > 0) {
-      const height = currentHeight || latestBlock?.height || 0;
-      const blocksWithConfirmations = initialBlocks.map(block => ({
-        ...block,
-        confirmations: Math.max(0, height - block.height + 1),
-      }));
-      setLiveBlocks(blocksWithConfirmations);
-    }
-  }, [initialBlocks, currentHeight, latestBlock]);
-
-  // Update blocks when latestBlock changes (via React Query)
-  useEffect(() => {
-    if (!latestBlock) return;
-    
-    const height = currentHeight || latestBlock.height;
-    
-    setLiveBlocks((prev) => {
-      // Check if we already have this block
-      const exists = prev.some((b) => b.hash === latestBlock.hash || b.height === latestBlock.height);
-      if (exists) {
-        // Update confirmations for all blocks
-        return prev.map(block => ({
-          ...block,
-          confirmations: Math.max(0, height - block.height + 1),
-        }));
-      }
-      
-      // Add new block at the front, keep max 12 blocks
-      const newBlock = {
-        ...latestBlock,
-        confirmations: Math.max(0, height - latestBlock.height + 1),
-      };
-      return [newBlock, ...prev].slice(0, 12);
-    });
-  }, [latestBlock, currentHeight]);
-
-  // Update confirmations when currentHeight changes
-  useEffect(() => {
-    if (currentHeight && liveBlocks.length > 0) {
-      setLiveBlocks((prev) =>
-        prev.map(block => ({
-          ...block,
-          confirmations: Math.max(0, currentHeight - block.height + 1),
-        }))
-      );
-    }
-  }, [currentHeight, liveBlocks.length]);
-
   // Fetch latest transactions - otimizado para 15 segundos (mesmo intervalo dos blocos)
   const { data: transactions, isLoading: txLoading } = useQuery({
     queryKey: ['latestTransactions'],
@@ -173,61 +87,11 @@ export default function HomePage() {
     refetchInterval: 15000, // Refetch every 15s (same as blocks)
   });
 
-  // Live transactions state - atualizado via React Query
-  const [liveTransactions, setLiveTransactions] = useState<Transaction[]>([]);
-
-  // Initialize with fetched transactions
-  useEffect(() => {
-    if (Array.isArray(transactions) && transactions.length > 0) {
-      setLiveTransactions(transactions);
-    }
-  }, [transactions]);
-
-  // Update transactions when new data arrives (via React Query)
-  // The API already returns updated confirmations, so we just update the state
-  useEffect(() => {
-    if (!transactions || !Array.isArray(transactions)) return;
-    
-    setLiveTransactions((prev) => {
-      // Check if we have new transactions by comparing txids
-      const newTxids = new Set(transactions.map(tx => tx.txid));
-      const prevTxids = new Set(prev.map(tx => tx.txid));
-      
-      // If txids are the same, just update with new data (confirmations, etc)
-      const txidsEqual = newTxids.size === prevTxids.size && 
-        Array.from(newTxids).every(txid => prevTxids.has(txid));
-      
-      if (txidsEqual) {
-        // Update existing transactions with new data (confirmations updated by API)
-        return prev.map(prevTx => {
-          const updatedTx = transactions.find(tx => tx.txid === prevTx.txid);
-          if (updatedTx) {
-            // Ensure confirmed status is based on confirmations >= 6
-            return {
-              ...updatedTx,
-              confirmed: (updatedTx.confirmations || 0) >= 6,
-            };
-          }
-          return prevTx;
-        });
-      }
-      
-      // New transactions arrived, replace the list
-      // Ensure confirmed status is based on confirmations >= 6
-      return transactions.map(tx => ({
-        ...tx,
-        confirmed: (tx.confirmations || 0) >= 6,
-      }));
-    });
-  }, [transactions]);
-
-  const latestBlocks = liveBlocks.length > 0 ? liveBlocks : (Array.isArray(initialBlocks) 
-    ? initialBlocks.map(block => ({
-        ...block,
-        confirmations: currentHeight ? Math.max(0, currentHeight - block.height + 1) : block.confirmations || 0,
-      }))
-    : []);
-  const latestTransactions = liveTransactions.length > 0 ? liveTransactions : (Array.isArray(transactions) ? transactions : []);
+  // Blocks and the latest block refresh independently; merge them on every render.
+  // Confirmations come from the chain height (stored values are snapshots).
+  const tipHeight = currentHeight || latestBlock?.height;
+  const latestBlocks = mergeLatestBlocks(latestBlock, initialBlocks, 12, tipHeight);
+  const latestTransactions = transactions ?? [];
 
   return (
     <div className="min-h-screen">
@@ -275,7 +139,7 @@ export default function HomePage() {
       {/* Stats Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {statsLoading ? (
+          {heightLoading ? (
             <>
               <StatsSkeleton />
               <StatsSkeleton />
@@ -300,16 +164,15 @@ export default function HomePage() {
                 delay={0.1}
               />
               <StatsCard
-                title="BBK Price"
-                value={`$${stats?.price?.toFixed(4) || '0.0000'}`}
-                trend={stats?.priceChange24h ? { value: stats.priceChange24h, isPositive: stats.priceChange24h > 0 } : undefined}
-                icon={TrendingUp}
+                title="Difficulty"
+                value={latestBlock ? formatDifficulty(latestBlock.difficulty) : '—'}
+                icon={Cpu}
                 delay={0.2}
               />
               <StatsCard
                 title="Mempool Size"
-                value={formatNumber(stats?.mempoolSize || 0)}
-                subtitle={formatBytes(stats?.mempoolBytes || 0)}
+                value={formatNumber(mempool?.size || 0)}
+                subtitle={formatBytes(mempool?.bytes || 0)}
                 icon={Database}
                 delay={0.3}
               />
@@ -362,7 +225,7 @@ export default function HomePage() {
                 </>
               ) : (
                 latestBlocks.map((block, index) => (
-                  <BlockCard key={block.hash} block={block} index={index} compact now={now} />
+                  <BlockCard key={block.hash} block={block} index={index} compact />
                 ))
               )}
             </div>

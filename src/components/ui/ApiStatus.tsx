@@ -3,20 +3,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { getApiHealth, formatTimeAgo } from '@/lib/api';
+import { getApiHealth } from '@/lib/api';
+import { TimeAgo } from './TimeAgo';
 
 export default function ApiStatus() {
-  const [now, setNow] = useState(Date.now());
-
-  // Update "now" every second to refresh "ago" timestamps in real-time
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   const { data, isLoading, isError, dataUpdatedAt } = useQuery({
     queryKey: ['apiHealth'],
@@ -28,7 +18,6 @@ export default function ApiStatus() {
 
   // Check if API is online: data exists, no error, and message indicates success
   const isOnline = !isError && data !== undefined && data.message !== 'API is unavailable' && (data.message.includes('running') || data.message.includes('API is running'));
-  const lastCheckTime = dataUpdatedAt ? dataUpdatedAt : Date.now();
 
   return (
     <motion.div
@@ -51,9 +40,9 @@ export default function ApiStatus() {
           )}
           <span className="text-xs text-[var(--text-muted)]">
             {isOnline ? 'Server is online' : 'Server is offline'}
-            {lastCheckTime && (
+            {dataUpdatedAt > 0 && (
               <span className="ml-1 text-[var(--text-muted)]/70">
-                • {formatTimeAgo(lastCheckTime, now)}
+                • <TimeAgo timestamp={dataUpdatedAt} />
               </span>
             )}
           </span>

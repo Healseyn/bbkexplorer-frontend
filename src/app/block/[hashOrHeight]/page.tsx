@@ -24,6 +24,7 @@ import { useState } from 'react';
 
 import { Loading } from '@/components/ui';
 import { getBlockDetails, getTransactionDetails, formatNumber, formatDate, formatBytes, formatHash, formatBBK, formatDifficulty } from '@/lib/api';
+import { analyzeCoinstake } from '@/lib/coinstake';
 
 export default function BlockDetailPage() {
   const params = useParams();
@@ -124,20 +125,35 @@ export default function BlockDetailPage() {
 
             {/* Navigation */}
             <div className="flex items-center gap-2">
-              <Link
-                href={`/block/${block.height - 1}`}
-                className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Previous
-              </Link>
-              <Link
-                href={`/block/${block.height + 1}`}
-                className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all"
-              >
-                Next
-                <ChevronRight className="w-4 h-4" />
-              </Link>
+              {/* No previous block before genesis, and no next block at the tip */}
+              {block.height > 0 ? (
+                <Link
+                  href={`/block/${block.height - 1}`}
+                  className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </Link>
+              ) : (
+                <span className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-muted)] opacity-50 cursor-not-allowed">
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </span>
+              )}
+              {block.nextBlockHash ? (
+                <Link
+                  href={`/block/${block.height + 1}`}
+                  className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <span className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-muted)] opacity-50 cursor-not-allowed">
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -261,56 +277,27 @@ export default function BlockDetailPage() {
               } 
               // Staking transaction: totalOutput > totalInput means new coins were generated
               else if (totalOutput > totalInput && totalInput > 0) {
-                // Get the staker address (from input)
-                const stakerAddress = vin.length > 0 && vin[0].address 
-                  ? (vin[0].address as string)
-                  : null;
-                
+                const { stakerAddress, stakingRewardSatoshis, masternodeOutputIndex, masternodeRewardSatoshis } =
+                  analyzeCoinstake(vin, vout, totalInput);
+
                 if (!stakerAddress) return;
-                
-                // Get all outputs with their values and addresses
-                const outputsWithValues = vout
-                  .map((output) => {
-                    const valueBBK = output.value as number | undefined;
-                    if (typeof valueBBK === 'number' && valueBBK > 0) {
-                      const valueSatoshis = getValueInSatoshis(valueBBK);
-                      const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
-                      const addresses = (scriptPubKey?.addresses as string[]) || [];
-                      const address = addresses[0] || 'Unknown';
-                      return { valueSatoshis, valueBBK, address };
-                    }
-                    return null;
-                  })
-                  .filter((o): o is { valueSatoshis: number; valueBBK: number; address: string } => o !== null);
-                
-                // Find output to staker (same address as input)
-                const stakerOutput = outputsWithValues.find(o => o.address === stakerAddress);
-                
-                // Find masternode output (largest output that is NOT to the staker)
-                const masternodeOutput = outputsWithValues
-                  .filter(o => o.address !== stakerAddress)
-                  .sort((a, b) => b.valueSatoshis - a.valueSatoshis)[0];
-                
-                // Staking reward = (output to staker) - (input from staker)
-                if (stakerOutput) {
-                  const stakingRewardSatoshis = stakerOutput.valueSatoshis - totalInput;
-                  
-                  if (stakingRewardSatoshis > 0) {
-                    allRewards.push({
-                      txid,
-                      address: stakerAddress, // Staking reward goes to the staker
-                      masternodeReward: 0,
-                      stakingReward: stakingRewardSatoshis,
-                    });
-                  }
-                }
-                
-                // Masternode reward is the largest output that goes to a different address
-                if (masternodeOutput) {
+
+                if (stakingRewardSatoshis > 0) {
                   allRewards.push({
                     txid,
-                    address: masternodeOutput.address, // Masternode reward goes to masternode address
-                    masternodeReward: masternodeOutput.valueSatoshis,
+                    address: stakerAddress, // Staking reward goes to the staker
+                    masternodeReward: 0,
+                    stakingReward: stakingRewardSatoshis,
+                  });
+                }
+
+                if (masternodeOutputIndex !== null) {
+                  const scriptPubKey = vout[masternodeOutputIndex].scriptPubKey as Record<string, unknown> | undefined;
+                  const addresses = (scriptPubKey?.addresses as string[]) || [];
+                  allRewards.push({
+                    txid,
+                    address: addresses[0] || 'Unknown', // Masternode reward goes to masternode address
+                    masternodeReward: masternodeRewardSatoshis,
                     stakingReward: 0,
                   });
                 }
@@ -453,45 +440,9 @@ export default function BlockDetailPage() {
                     const isReward = isCoinbase && index === 0; // Coinbase has block rewards
                     
                     // Identify masternode and staking rewards in staking transactions
-                    let masternodeOutputIndex: number | null = null;
-                    let stakingRewardSatoshis = 0;
-                    const stakerAddress = vin.length > 0 && vin[0].address 
-                      ? (vin[0].address as string)
-                      : null;
-                    
-                    if (isStaking && stakerAddress) {
-                      // Get all outputs with their values and addresses
-                      const outputsWithValues = vout
-                        .map((output, idx) => {
-                          const valueBBK = output.value as number | undefined;
-                          if (typeof valueBBK === 'number' && valueBBK > 0) {
-                            const valueSatoshis = getValueInSatoshis(valueBBK);
-                            const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
-                            const addresses = (scriptPubKey?.addresses as string[]) || [];
-                            const address = addresses[0] || 'Unknown';
-                            return { index: idx, valueSatoshis, valueBBK, address };
-                          }
-                          return null;
-                        })
-                        .filter((o): o is { index: number; valueSatoshis: number; valueBBK: number; address: string } => o !== null);
-                      
-                      // Find output to staker (same address as input)
-                      const stakerOutput = outputsWithValues.find(o => o.address === stakerAddress);
-                      
-                      // Find masternode output (largest output that is NOT to the staker)
-                      const masternodeOutput = outputsWithValues
-                        .filter(o => o.address !== stakerAddress)
-                        .sort((a, b) => b.valueSatoshis - a.valueSatoshis)[0];
-                      
-                      if (masternodeOutput) {
-                        masternodeOutputIndex = masternodeOutput.index;
-                      }
-                      
-                      // Staking reward = (output to staker) - (input from staker)
-                      if (stakerOutput) {
-                        stakingRewardSatoshis = stakerOutput.valueSatoshis - totalInput;
-                      }
-                    }
+                    const { stakerAddress, stakingRewardSatoshis, masternodeOutputIndex } = isStaking
+                      ? analyzeCoinstake(vin, vout, totalInput)
+                      : { stakerAddress: null, stakingRewardSatoshis: 0, masternodeOutputIndex: null };
 
                   return (
                     <Link

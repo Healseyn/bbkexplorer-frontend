@@ -6,9 +6,7 @@ import type {
   TransactionOutput,
   Address,
   AddressTransaction,
-  NetworkStats,
   PaginatedResponse,
-  SearchResult,
   MempoolTransaction,
   Masternode,
   MasternodesListResponse,
@@ -17,7 +15,7 @@ import type {
   Peer,
   PeersResponse,
 } from '@/types';
-import { getCachedBlock, cacheBlock, cacheBlocks } from './block-cache';
+import { getCachedBlock, cacheBlock } from './block-cache';
 
 type ApiErrorPayload = { code?: string; message?: string };
 type ApiResponse<T> = { success: true; data: T } | { success: false; error: ApiErrorPayload };
@@ -51,12 +49,6 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-// Network Stats
-export async function getNetworkStats(): Promise<NetworkStats> {
-  const { data } = await api.get<ApiResponse<NetworkStats>>('/api/stats');
-  return unwrap(data);
-}
 
 // API Health
 export async function getApiHealth(): Promise<ApiHealth> {
@@ -222,18 +214,6 @@ export async function getStakingStatus(): Promise<StakingStatus> {
   return unwrap(data);
 }
 
-// Search
-export async function search(query: string): Promise<SearchResult | null> {
-  try {
-    const { data } = await api.get<ApiResponse<SearchResult>>('/api/search', {
-      params: { q: query },
-    });
-    return unwrap(data);
-  } catch {
-    return null;
-  }
-}
-
 // Mempool
 export async function getMempoolTransactions(
   page = 1,
@@ -254,6 +234,19 @@ export async function getMempoolTxids(verbose = false): Promise<string[] | Recor
   return unwrap(data);
 }
 
+// Mempool transaction count and total size, from the verbose mempool listing
+export async function getMempoolStats(): Promise<{ size: number; bytes: number }> {
+  const mempool = await getMempoolTxids(true);
+  if (Array.isArray(mempool)) {
+    return { size: mempool.length, bytes: 0 };
+  }
+  const entries = Object.values(mempool) as Array<{ size?: number }>;
+  return {
+    size: entries.length,
+    bytes: entries.reduce((sum, entry) => sum + (typeof entry?.size === 'number' ? entry.size : 0), 0),
+  };
+}
+
 // ===== Backend-contract endpoints (current BitBlocks Explorer API) =====
 export async function getChainHeight(): Promise<number> {
   const { data } = await api.get<ApiResponse<{ height: number }>>('/api/blocks/height');
@@ -263,6 +256,12 @@ export async function getChainHeight(): Promise<number> {
 export async function getLatestBlock(): Promise<Block> {
   const { block } = await getBlockDetails('latest');
   return block;
+}
+
+// Confirmations change with the tip; cached and stored values are snapshots
+function withConfirmations(block: Block, currentHeight?: number): Block {
+  if (currentHeight === undefined) return block;
+  return { ...block, confirmations: Math.max(0, currentHeight - block.height + 1) };
 }
 
 export async function getBlockByIdentifier(identifier: string | number, currentHeight?: number): Promise<Block> {
@@ -275,59 +274,27 @@ export async function getBlockByIdentifier(identifier: string | number, currentH
   // Tentar buscar do cache primeiro
   const cached = getCachedBlock(identifier);
   if (cached) {
-    return cached;
+    return withConfirmations(cached.block, currentHeight);
   }
 
-  // Se não estiver no cache, buscar da API
+  // Se não estiver no cache, buscar da API (getBlockDetails já salva no cache)
   const { block } = await getBlockDetails(identifier, currentHeight);
-  
-  // Salvar no cache se estiver confirmado
-  if (currentHeight !== undefined && block.height < currentHeight) {
-    cacheBlock(block, currentHeight);
-  } else if (block.confirmations > 0) {
-    cacheBlock(block, currentHeight);
-  }
-
-  return block;
+  return withConfirmations(block, currentHeight);
 }
 
 export async function getBlockDetails(
   identifier: string | number,
   currentHeight?: number
 ): Promise<{ block: Block; txids: string[] }> {
-  // Não usar cache para 'latest'
-  if (identifier === 'latest') {
-    const path = '/api/blocks/latest';
-    const { data } = await api.get<ApiResponse<Record<string, unknown>>>(path);
-    const raw = unwrap(data);
-    const block = mapBackendBlockToBlock(raw);
-
-    const tx = (raw as Record<string, unknown>).tx;
-    const txids = Array.isArray(tx) ? tx.filter((t): t is string => typeof t === 'string') : [];
-
-    return { block, txids };
-  }
-
-  // Tentar buscar do cache primeiro
-  const cached = getCachedBlock(identifier);
-  if (cached) {
-    // Para blocos em cache, ainda precisamos buscar os txids da API
-    // Mas podemos otimizar isso no futuro se necessário
-    const path = `/api/blocks/${identifier}`;
-    try {
-      const { data } = await api.get<ApiResponse<Record<string, unknown>>>(path);
-      const raw = unwrap(data);
-      const tx = (raw as Record<string, unknown>).tx;
-      const txids = Array.isArray(tx) ? tx.filter((t): t is string => typeof t === 'string') : [];
-      return { block: cached, txids };
-    } catch {
-      // Se falhar, retornar com txids vazios
-      return { block: cached, txids: [] };
+  // Só usar o cache quando os txids também estão nele; caso contrário a API é chamada de qualquer forma
+  if (identifier !== 'latest') {
+    const cached = getCachedBlock(identifier);
+    if (cached?.txids) {
+      return { block: withConfirmations(cached.block, currentHeight), txids: cached.txids };
     }
   }
 
-  // Se não estiver no cache, buscar da API
-  const path = `/api/blocks/${identifier}`;
+  const path = identifier === 'latest' ? '/api/blocks/latest' : `/api/blocks/${identifier}`;
   const { data } = await api.get<ApiResponse<Record<string, unknown>>>(path);
   const raw = unwrap(data);
   const block = mapBackendBlockToBlock(raw);
@@ -335,14 +302,12 @@ export async function getBlockDetails(
   const tx = (raw as Record<string, unknown>).tx;
   const txids = Array.isArray(tx) ? tx.filter((t): t is string => typeof t === 'string') : [];
 
-  // Salvar no cache se estiver confirmado
-  if (currentHeight !== undefined && block.height < currentHeight) {
-    cacheBlock(block, currentHeight);
-  } else if (block.confirmations > 0) {
-    cacheBlock(block, currentHeight);
+  // Salvar no cache apenas blocos com confirmações suficientes (cacheBlock verifica)
+  if (identifier !== 'latest') {
+    cacheBlock(block, currentHeight, txids);
   }
 
-  return { block, txids };
+  return { block: withConfirmations(block, currentHeight), txids };
 }
 
 export async function getLatestNBlocks(limit = 20, concurrency = 6): Promise<Block[]> {
@@ -352,15 +317,9 @@ export async function getLatestNBlocks(limit = 20, concurrency = 6): Promise<Blo
   const out: Block[] = [];
   for (let i = 0; i < heights.length; i += concurrency) {
     const batch = heights.slice(i, i + concurrency);
-    // Passar currentHeight para usar cache e salvar blocos confirmados
+    // Passar currentHeight para usar cache e calcular confirmações
     const blocks = await Promise.all(batch.map((h) => getBlockByIdentifier(h, height)));
     out.push(...blocks);
-    
-    // Salvar blocos confirmados em lote
-    const confirmedBlocks = blocks.filter(block => block.height < height || block.confirmations > 0);
-    if (confirmedBlocks.length > 0) {
-      cacheBlocks(confirmedBlocks, height);
-    }
   }
   return out;
 }

@@ -10,4 +10,5 @@ export * from './LiveBlockTicker';
 export * from './MasternodeRow';
 export * from './MasternodeStatusBadge';
 export * from './PeerRow';
+export * from './TimeAgo';
 export { default as ApiStatus } from './ApiStatus';

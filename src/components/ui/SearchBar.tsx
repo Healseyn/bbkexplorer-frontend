@@ -28,11 +28,10 @@ export function SearchBar({
     setIsSearching(true);
     try {
       const route = await handleSearchQuery(trimmed);
-      if (route) {
-        router.push(route);
-        setQuery(''); // Clear search after navigation
-      }
-    } catch (error) {
+      // No match: the search page shows "No results found"
+      router.push(route ?? `/search?q=${encodeURIComponent(trimmed)}`);
+      setQuery(''); // Clear search after navigation
+    } catch {
       // If search fails, fallback to search page
       router.push(`/search?q=${encodeURIComponent(trimmed)}`);
     } finally {

@@ -21,6 +21,7 @@ import { useState } from 'react';
 
 import { Loading } from '@/components/ui';
 import { getTransactionDetails, formatNumber, formatDate, formatBytes, formatHash, formatBBK } from '@/lib/api';
+import { analyzeCoinstake } from '@/lib/coinstake';
 import type { Transaction } from '@/types';
 
 export default function TransactionDetailPage() {
@@ -66,10 +67,11 @@ export default function TransactionDetailPage() {
       return sum + getValueInSatoshis(value || 0);
     }, 0);
 
-    const fee = totalInput > 0 && totalOutput > 0 ? totalInput - totalOutput : 0;
-    const feeRate = size > 0 ? fee / size : 0;
     const isCoinbase = vin.length > 0 && !!vin[0].coinbase;
     const isStaking = !isCoinbase && totalOutput > totalInput && totalInput > 0;
+    // Coinbase and coinstake create coins (outputs > inputs), so they pay no fee
+    const fee = !isCoinbase && !isStaking && totalInput > 0 ? Math.max(0, totalInput - totalOutput) : 0;
+    const feeRate = size > 0 ? fee / size : 0;
 
     // Map inputs
     const inputs = vin.map((input, index) => {
@@ -91,46 +93,10 @@ export default function TransactionDetailPage() {
       };
     });
 
-    // Identify staking rewards
-    let masternodeOutputIndex: number | null = null;
-    let stakingRewardSatoshis = 0;
-    const stakerAddress = vin.length > 0 && vin[0].address 
-      ? (vin[0].address as string)
-      : null;
-
-    if (isStaking && stakerAddress) {
-      // Get all outputs with their values and addresses
-      const outputsWithValues = vout
-        .map((output, idx) => {
-          const valueBBK = output.value as number | undefined;
-          if (typeof valueBBK === 'number' && valueBBK > 0) {
-            const valueSatoshis = getValueInSatoshis(valueBBK);
-            const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
-            const addresses = (scriptPubKey?.addresses as string[]) || [];
-            const address = addresses[0] || 'Unknown';
-            return { index: idx, valueSatoshis, valueBBK, address };
-          }
-          return null;
-        })
-        .filter((o): o is { index: number; valueSatoshis: number; valueBBK: number; address: string } => o !== null);
-
-      // Find output to staker (same address as input)
-      const stakerOutput = outputsWithValues.find(o => o.address === stakerAddress);
-
-      // Find masternode output (largest output that is NOT to the staker)
-      const masternodeOutput = outputsWithValues
-        .filter(o => o.address !== stakerAddress)
-        .sort((a, b) => b.valueSatoshis - a.valueSatoshis)[0];
-
-      if (masternodeOutput) {
-        masternodeOutputIndex = masternodeOutput.index;
-      }
-
-      // Staking reward = (output to staker) - (input from staker)
-      if (stakerOutput) {
-        stakingRewardSatoshis = stakerOutput.valueSatoshis - totalInput;
-      }
-    }
+    // Identify staking and masternode rewards
+    const { stakerAddress, stakingRewardSatoshis, masternodeOutputIndex } = isStaking
+      ? analyzeCoinstake(vin, vout, totalInput)
+      : { stakerAddress: null, stakingRewardSatoshis: 0, masternodeOutputIndex: null };
 
     // Map outputs
     const outputs = vout.map((output, index) => {
@@ -161,7 +127,8 @@ export default function TransactionDetailPage() {
     });
 
     // Determine timestamp
-    const timestamp = blocktime || time || Math.floor(Date.now() / 1000);
+    // 0 for mempool transactions without a time yet
+    const timestamp = blocktime || time || 0;
 
     // A transaction is confirmed only when it has 6 or more confirmations (same as blocks)
     const confirmed = confirmations >= 6;
@@ -291,9 +258,11 @@ export default function TransactionDetailPage() {
               <p className="text-2xl font-bold text-[var(--text-primary)]">
                 {formatBBK(tx.totalOutput)} <span className="text-[var(--accent-primary)]">BBK</span>
               </p>
-              <p className="text-sm text-[var(--text-muted)]">
-                Fee: {formatNumber(tx.fee)} sats ({tx.feeRate.toFixed(1)} sat/vB)
-              </p>
+              {!tx.isCoinbase && !tx.isStaking && (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Fee: {formatNumber(tx.fee)} sats{tx.size > 0 && ` (${tx.feeRate.toFixed(1)} sat/vB)`}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -363,21 +332,21 @@ export default function TransactionDetailPage() {
               <Clock className="w-4 h-4" />
               <span className="text-xs">Timestamp</span>
             </div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">{formatDate(tx.timestamp)}</p>
+            <p className="text-sm font-medium text-[var(--text-primary)]">{tx.timestamp > 0 ? formatDate(tx.timestamp) : 'Pending'}</p>
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-2 text-[var(--text-muted)] mb-1">
               <Database className="w-4 h-4" />
               <span className="text-xs">Size</span>
             </div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">{formatBytes(tx.size)}</p>
+            <p className="text-sm font-medium text-[var(--text-primary)]">{tx.size > 0 ? formatBytes(tx.size) : 'N/A'}</p>
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-2 text-[var(--text-muted)] mb-1">
               <Zap className="w-4 h-4" />
               <span className="text-xs">Fee Rate</span>
             </div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">{tx.feeRate.toFixed(1)} sat/vB</p>
+            <p className="text-sm font-medium text-[var(--text-primary)]">{tx.size > 0 ? `${tx.feeRate.toFixed(1)} sat/vB` : 'N/A'}</p>
           </div>
         </motion.div>
 
