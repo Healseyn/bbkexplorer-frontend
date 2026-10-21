@@ -124,20 +124,35 @@ export default function BlockDetailPage() {
 
             {/* Navigation */}
             <div className="flex items-center gap-2">
-              <Link
-                href={`/block/${block.height - 1}`}
-                className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Previous
-              </Link>
-              <Link
-                href={`/block/${block.height + 1}`}
-                className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all"
-              >
-                Next
-                <ChevronRight className="w-4 h-4" />
-              </Link>
+              {/* No previous block before genesis, and no next block at the tip */}
+              {block.height > 0 ? (
+                <Link
+                  href={`/block/${block.height - 1}`}
+                  className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </Link>
+              ) : (
+                <span className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-muted)] opacity-50 cursor-not-allowed">
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </span>
+              )}
+              {block.nextBlockHash ? (
+                <Link
+                  href={`/block/${block.height + 1}`}
+                  className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-all"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <span className="flex items-center gap-1 px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-muted)] opacity-50 cursor-not-allowed">
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </span>
+              )}
             </div>
           </div>
         </div>
