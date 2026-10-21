@@ -21,6 +21,7 @@ import { useState } from 'react';
 
 import { Loading } from '@/components/ui';
 import { getTransactionDetails, formatNumber, formatDate, formatBytes, formatHash, formatBBK } from '@/lib/api';
+import { analyzeCoinstake } from '@/lib/coinstake';
 import type { Transaction } from '@/types';
 
 export default function TransactionDetailPage() {
@@ -92,46 +93,10 @@ export default function TransactionDetailPage() {
       };
     });
 
-    // Identify staking rewards
-    let masternodeOutputIndex: number | null = null;
-    let stakingRewardSatoshis = 0;
-    const stakerAddress = vin.length > 0 && vin[0].address 
-      ? (vin[0].address as string)
-      : null;
-
-    if (isStaking && stakerAddress) {
-      // Get all outputs with their values and addresses
-      const outputsWithValues = vout
-        .map((output, idx) => {
-          const valueBBK = output.value as number | undefined;
-          if (typeof valueBBK === 'number' && valueBBK > 0) {
-            const valueSatoshis = getValueInSatoshis(valueBBK);
-            const scriptPubKey = output.scriptPubKey as Record<string, unknown> | undefined;
-            const addresses = (scriptPubKey?.addresses as string[]) || [];
-            const address = addresses[0] || 'Unknown';
-            return { index: idx, valueSatoshis, valueBBK, address };
-          }
-          return null;
-        })
-        .filter((o): o is { index: number; valueSatoshis: number; valueBBK: number; address: string } => o !== null);
-
-      // Find output to staker (same address as input)
-      const stakerOutput = outputsWithValues.find(o => o.address === stakerAddress);
-
-      // Find masternode output (largest output that is NOT to the staker)
-      const masternodeOutput = outputsWithValues
-        .filter(o => o.address !== stakerAddress)
-        .sort((a, b) => b.valueSatoshis - a.valueSatoshis)[0];
-
-      if (masternodeOutput) {
-        masternodeOutputIndex = masternodeOutput.index;
-      }
-
-      // Staking reward = (output to staker) - (input from staker)
-      if (stakerOutput) {
-        stakingRewardSatoshis = stakerOutput.valueSatoshis - totalInput;
-      }
-    }
+    // Identify staking and masternode rewards
+    const { stakerAddress, stakingRewardSatoshis, masternodeOutputIndex } = isStaking
+      ? analyzeCoinstake(vin, vout, totalInput)
+      : { stakerAddress: null, stakingRewardSatoshis: 0, masternodeOutputIndex: null };
 
     // Map outputs
     const outputs = vout.map((output, index) => {
