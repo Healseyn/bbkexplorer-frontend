@@ -294,7 +294,7 @@ export default function TransactionDetailPage() {
               </p>
               {!tx.isCoinbase && !tx.isStaking && (
                 <p className="text-sm text-[var(--text-muted)]">
-                  Fee: {formatNumber(tx.fee)} sats ({tx.feeRate.toFixed(1)} sat/vB)
+                  Fee: {formatNumber(tx.fee)} sats{tx.size > 0 && ` (${tx.feeRate.toFixed(1)} sat/vB)`}
                 </p>
               )}
             </div>
@@ -373,14 +373,14 @@ export default function TransactionDetailPage() {
               <Database className="w-4 h-4" />
               <span className="text-xs">Size</span>
             </div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">{formatBytes(tx.size)}</p>
+            <p className="text-sm font-medium text-[var(--text-primary)]">{tx.size > 0 ? formatBytes(tx.size) : 'N/A'}</p>
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-2 text-[var(--text-muted)] mb-1">
               <Zap className="w-4 h-4" />
               <span className="text-xs">Fee Rate</span>
             </div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">{tx.feeRate.toFixed(1)} sat/vB</p>
+            <p className="text-sm font-medium text-[var(--text-primary)]">{tx.size > 0 ? `${tx.feeRate.toFixed(1)} sat/vB` : 'N/A'}</p>
           </div>
         </motion.div>
 
