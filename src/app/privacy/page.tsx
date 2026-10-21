@@ -184,7 +184,7 @@ export default function PrivacyPolicyPage() {
           <p className="text-[var(--text-secondary)] leading-relaxed">
             We may update this Privacy Policy from time to time. We will notify users of any
             material changes by posting the new Privacy Policy on this page and updating the
-            "Last updated" date. We encourage you to review this Privacy Policy periodically
+            &quot;Last updated&quot; date. We encourage you to review this Privacy Policy periodically
             to stay informed about how we are protecting your information.
           </p>
         </motion.div>
